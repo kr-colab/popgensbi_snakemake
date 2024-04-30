@@ -1,0 +1,10 @@
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - slim
+  - msprime
+  - numpy
+  - stdpopsim
+  - matplotlib
+  - sbi
