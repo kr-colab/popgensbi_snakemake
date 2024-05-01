@@ -1,0 +1,1 @@
+# Todo - make a rule to simulate AraTha 2 epoch model, prepare data for SNPE inference.
