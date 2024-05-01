@@ -1,10 +1,12 @@
 channels:
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
-  - slim
-  - msprime
-  - numpy
   - stdpopsim
-  - matplotlib
-  - sbi
+  - defopt
+  - snakemake
+  - pip
+  - pip:
+    - sbi
+    - dinf
