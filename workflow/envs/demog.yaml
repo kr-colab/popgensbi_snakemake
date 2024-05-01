@@ -10,3 +10,4 @@ dependencies:
   - pip:
     - sbi
     - dinf
+    - snakemake-executor-plugin-slurm
