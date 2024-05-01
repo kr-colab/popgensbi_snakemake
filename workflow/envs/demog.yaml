@@ -1,8 +1,14 @@
 channels:
+  - pytorch
+  - nvidia
   - conda-forge
   - bioconda
   - defaults
 dependencies:
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8
   - stdpopsim
   - defopt
   - snakemake
