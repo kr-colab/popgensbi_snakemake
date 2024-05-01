@@ -17,6 +17,7 @@ from process_ts import dinf_extract
 import os
 import defopt
 import numpy as np
+import pickle
 
 def main(num_simulations: int, outdir: str, num_workers: int, prefix: str):
     if not os.path.isdir(outdir):
@@ -36,8 +37,8 @@ def main(num_simulations: int, outdir: str, num_workers: int, prefix: str):
     prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
 
     # save true values and bounds for plotting at the end of NPE inference
-    true_values_file = f"{outdir}/AraTha_2epoch_true.npy"
-    bounds_file = f"{outdir}/AraTha_2epoch_bounds.npy"
+    true_values_file = f"{outdir}/theta_true.npy"
+    bounds_file = f"{outdir}/theta_bounds.npy"
     if not os.path.exists(true_values_file):
         np.save(true_values_file, true_values)
     if not os.path.exists(bounds_file):
@@ -69,6 +70,16 @@ def main(num_simulations: int, outdir: str, num_workers: int, prefix: str):
     simulator = process_simulator(simulator, prior, prior_returns_numpy)
     check_sbi_inputs(simulator, prior)
 
+    # pickle simulator, prior, and bounds for SNPE script
+    simulator_path = f"{outdir}/simulator.pkl"
+    if not os.path.exists(simulator_path):
+        with open(simulator_path, 'wb') as f:
+            pickle.dump(simulator, f)
+    prior_path = f"{outdir}/prior.pkl"
+    if not os.path.exists(prior_path):
+        with open(prior_path, 'wb') as f:
+            pickle.dump(prior_distribution, f)
+    
     # finally simulate and create a list of theta and x
     theta, x = simulate_for_sbi(simulator, proposal=prior, num_simulations=num_simulations, num_workers=num_workers, )
 
