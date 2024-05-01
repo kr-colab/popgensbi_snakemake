@@ -36,8 +36,8 @@ def main(num_simulations: int, outdir: str, num_workers: int, prefix: str):
     prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
 
     # save true values and bounds for plotting at the end of NPE inference
-    true_values_file = f"{outdir}/{prefix}_AraTha_2epoch_true.npy"
-    bounds_file = f"{outdir}/{prefix}_AraTha_2epoch_bounds.npy"
+    true_values_file = f"{outdir}/AraTha_2epoch_true.npy"
+    bounds_file = f"{outdir}/AraTha_2epoch_bounds.npy"
     if not os.path.exists(true_values_file):
         np.save(true_values_file, true_values)
     if not os.path.exists(bounds_file):
@@ -73,8 +73,8 @@ def main(num_simulations: int, outdir: str, num_workers: int, prefix: str):
     theta, x = simulate_for_sbi(simulator, proposal=prior, num_simulations=num_simulations, num_workers=num_workers, )
 
     # save theta and x to an npy file
-    theta = theta.squeeze().numpy()
-    x = x.squeeze().numpy()
+    theta = theta.squeeze().cpu().numpy()
+    x = x.squeeze().cpu().numpy()
     if prefix != "":
         prefix += "_"
     np.save(
