@@ -3,3 +3,4 @@ resources/**
 logs/**
 .snakemake
 .snakemake/**
+workflow/scripts/__pycache__/**
