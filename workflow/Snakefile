@@ -3,9 +3,9 @@
 # https://snakemake.readthedocs.io/en/stable/snakefiles/best_practices.html,
 # in particular regarding the standardized folder structure mentioned there. 
 
-n_test_sims = 2000 # number of simulations to use for testing
-n_train_sims_per_job = 250 # number of simulations per training data simulating job
-n_train_reps = 300 # number of training data simulation jobs to run
+n_test_sims = 600 # number of simulations to use for testing
+n_train_sims_per_job = 25 # number of simulations per training data simulating job
+n_train_reps = 30 # number of training data simulation jobs to run
 # Snakefile
 import os
 
@@ -21,3 +21,6 @@ rule final:
     input:
         expand("results/AraTha_2epoch/rep_{i}_{Ntrain}_simulations.npy", i=range(n_train_reps), Ntrain=n_train_sims_per_job),
         expand("results/AraTha_2epoch/test_{Ntest}_simulations.npy", Ntest=n_test_sims),
+        "results/AraTha_2epoch/posteriors/posterior.pkl",
+        "results/AraTha_2epoch/posteriors/default_obs_samples.npy",
+        "results/AraTha_2epoch/posteriors/default_obs_corner.png"
