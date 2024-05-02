@@ -1,13 +1,9 @@
-# Todo - make a rule to simulate AraTha 2 epoch model, prepare data for SNPE inference.
-
 
 n_test_sims = 2000 # number of simulations to use for testing
 n_train_sims_per_job = 250 # number of simulations per training data simulating job
 n_train_reps = 300 # number of training data simulation jobs to run
 
 # Total number of training simulations is n_train_sims_per_job*n_train_reps
-
-n_ensemble = 10 # number of posterior estimators to train which then get combined into an ensemble
 
 rule all:
     input:
@@ -17,10 +13,10 @@ rule all:
 rule simulate_test:
     message: "simulating test data..."
     output: expand("results/AraTha_2epoch/test_{Ntest}_simulations.npy", Ntest=n_test_sims)
-    shell: "python scripts/AraTha_2epoch/simulate_AraTha_Africa2epoch.py {n_test_sims} results/AraTha_2epoch/ 1 test"
+    shell: "python scripts/simulate.py {n_test_sims} results/AraTha_2epoch/ 1 test"
 
 
 rule simulate_train:
     message: "simulating training sets..."
     output: "results/AraTha_2epoch/rep_{i}_{Ntrain}_simulations.npy"
-    shell: "python scripts/simulate_AraTha_Africa2epoch.py {wildcards.Ntrain} results/AraTha_2epoch/ 1 rep_{wildcards.i}"
+    shell: "python scripts/simulate.py {wildcards.Ntrain} results/AraTha_2epoch/ 1 rep_{wildcards.i}"
