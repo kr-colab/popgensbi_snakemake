@@ -78,7 +78,7 @@ def main(num_simulations: int, outdir: str, num_workers: int, prefix: str):
     prior_path = f"{outdir}/prior.pkl"
     if not os.path.exists(prior_path):
         with open(prior_path, 'wb') as f:
-            pickle.dump(prior_distribution, f)
+            pickle.dump(prior, f)
     
     # finally simulate and create a list of theta and x
     theta, x = simulate_for_sbi(simulator, proposal=prior, num_simulations=num_simulations, num_workers=num_workers, )
