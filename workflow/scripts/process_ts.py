@@ -1,6 +1,8 @@
 import dinf
 import torch
 
+## Todo - Restructure simulate.py and process_ts.py so that ts gets processed after all of the siimulations?
+## (That is what happens if we pre-train an encoder to learn summary statistics)
 def dinf_extract(ts, n_sample, n_snps, ploidy, phased, maf_thresh):
     '''
     input : tree sequence of one population
