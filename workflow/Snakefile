@@ -19,5 +19,5 @@ for rule in rule_files:
 # Define the final target
 rule final:
     input:
-        expand("results/rep_{i}_{Ntrain}_simulations.npy", i=range(n_train_reps), Ntrain=n_train_sims_per_job),
-        expand("results/test_{Ntest}_simulations.npy", Ntest=n_test_sims),
+        expand("results/AraTha_2epoch/rep_{i}_{Ntrain}_simulations.npy", i=range(n_train_reps), Ntrain=n_train_sims_per_job),
+        expand("results/AraTha_2epoch/test_{Ntest}_simulations.npy", Ntest=n_test_sims),
