@@ -1,3 +1,2 @@
-n_test_sims: 600 # number of simulations to use for testing
 n_train_sims_per_job: 25 # number of simulations per training data simulating job
 n_train_reps: 30 # number of training data simulation jobs to run
