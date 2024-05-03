@@ -7,7 +7,6 @@ import os
 
 # Set up config
 configfile: "../config/config.yaml"
-n_test_sims = config["n_test_sims"] # number of simulations to use for testing
 n_train_sims_per_job = config["n_train_sims_per_job"] # number of simulations per training data simulating job
 n_train_reps = config["n_train_reps"] # number of training data simulation jobs to run
 
@@ -22,7 +21,6 @@ for rule in rule_files:
 rule final:
     input:
         expand("results/AraTha_2epoch/rep_{i}_{Ntrain}_simulations.npy", i=range(n_train_reps), Ntrain=n_train_sims_per_job),
-        expand("results/AraTha_2epoch/test_{Ntest}_simulations.npy", Ntest=n_test_sims),
         "results/AraTha_2epoch/posteriors/posterior.pkl",
         "results/AraTha_2epoch/posteriors/default_obs_samples.npy",
         "results/AraTha_2epoch/posteriors/default_obs_corner.png"
