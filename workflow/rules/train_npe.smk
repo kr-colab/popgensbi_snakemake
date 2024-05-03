@@ -14,4 +14,6 @@ rule train_npe:
         mem_mb="32000",
         slurm_partition="kerngpu",
         slurm_extra="--gres=gpu:1 --constraint=a100"
+    log: "log/train_npe.log"
+    conda: "envs/demog.yaml"
     shell: "python scripts/train_npe.py results/AraTha_2epoch results/AraTha_2epoch/posteriors/"

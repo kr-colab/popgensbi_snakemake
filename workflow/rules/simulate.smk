@@ -6,4 +6,6 @@ n_train_reps = config["n_train_reps"] # number of training data simulation jobs 
 rule simulate_train:
     message: "simulating training sets..."
     output: "results/AraTha_2epoch/rep_{i}_{Ntrain}_simulations.npy"
+    log: "log/simulate_train_rep_{i}_{Ntrain}.log"
+    conda: "envs/demog.yaml"
     shell: "python scripts/simulate.py {wildcards.Ntrain} results/AraTha_2epoch/ 1 rep_{wildcards.i}"

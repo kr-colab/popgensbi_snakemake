@@ -4,6 +4,8 @@ rule plot_posterior:
     output:
         "results/AraTha_2epoch/posteriors/default_obs_samples.npy",
         "results/AraTha_2epoch/posteriors/default_obs_corner.png"
+    log: "log/plot_posterior.log"
+    conda: "envs/demog.yaml"
     resources:
         mem_mb="5000",
         slurm_partition="kerngpu",
