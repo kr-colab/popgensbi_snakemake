@@ -35,8 +35,11 @@ class AraTha_2epoch_simulator:
         self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
 
     def __call__(self, theta):
-        N_A, N_0, t_1, mutation_rate = theta.squeeze().cpu().tolist()
-
+        if type(theta) is torch.Tensor:
+            N_A, N_0, t_1, mutation_rate = theta.squeeze().cpu().tolist()
+        elif type(theta) is list:
+            N_A, N_0, t_1, mutation_rate = theta
+        
         species = stdpopsim.get_species("AraTha")
         contig = species.get_contig(length=10e6, mutation_rate=mutation_rate)
         model = stdpopsim.PiecewiseConstantSize(N_A, (t_1, N_0))
