@@ -17,6 +17,7 @@ import defopt
 import numpy as np
 import pickle
 from simulators import AraTha_2epoch_simulator
+
 def main(num_simulations: int, outdir: str, num_workers: int, prefix: str):
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
