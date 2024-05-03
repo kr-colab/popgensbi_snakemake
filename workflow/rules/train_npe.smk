@@ -1,4 +1,3 @@
-n_test_sims = config["n_test_sims"] # number of simulations to use for testing
 n_train_sims_per_job = config["n_train_sims_per_job"] # number of simulations per training data simulating job
 n_train_reps = config["n_train_reps"] # number of training data simulation jobs to run
 
