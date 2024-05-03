@@ -6,6 +6,7 @@ import defopt
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from simulators import AraTha_2epoch_simulator
 
 def main(
     data_dir: str,
@@ -16,19 +17,20 @@ def main(
 
     simulator = AraTha_2epoch_simulator()
     bounds = simulator.bounds
-    thata_star = simulator.true_values
-    posterior = pickle.load(f"{outdir}/{prefix}")
+    theta_star = simulator.true_values
+    with open(f"{outdir}/{prefix}posterior.pkl", "rb") as f:
+        posterior = pickle.load(f)   
 
     try:
-        x_obs = simulator(theta).unsqueeze(0)
+        x_obs = simulator(list(theta_star.values())).unsqueeze(0)
         samples = posterior.sample((10_000,), x=x_obs.cuda(), show_progress_bars=True).cpu().numpy()
 
         np.save(f"{outdir}/{prefix}default_obs_samples.npy", samples)
         _ = corner.corner(
             samples,
-            labels=[k for k in bounds.keys()],
-            truths=[v for v in theta_star.items()],
-            range=[v for _, v in bounds.items()],
+            labels=list(bounds.keys()),
+            truths=list(theta_star.values()),
+            range=list(bounds.values()),
         )
         plt.savefig(f"{outdir}/{prefix}default_obs_corner.png")
     except KeyError:
