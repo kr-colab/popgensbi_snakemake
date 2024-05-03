@@ -2,3 +2,25 @@
 # Please follow the best practices: 
 # https://snakemake.readthedocs.io/en/stable/snakefiles/best_practices.html,
 # in particular regarding the standardized folder structure mentioned there. 
+# Snakefile
+import os
+
+# Set up config
+configfile: "../config/config.yaml"
+n_train_sims_per_job = config["n_train_sims_per_job"] # number of simulations per training data simulating job
+n_train_reps = config["n_train_reps"] # number of training data simulation jobs to run
+
+# Get the list of rule files
+rule_files = [os.path.join("rules/", f) for f in os.listdir("rules/") if f.endswith(".smk")]
+
+# Include the rule files
+for rule in rule_files:
+    include: rule
+
+# Define the final target
+rule final:
+    input:
+        expand("results/AraTha_2epoch/rep_{i}_{Ntrain}_simulations.npy", i=range(n_train_reps), Ntrain=n_train_sims_per_job),
+        "results/AraTha_2epoch/posteriors/posterior.pkl",
+        "results/AraTha_2epoch/posteriors/default_obs_samples.npy",
+        "results/AraTha_2epoch/posteriors/default_obs_corner.png"
