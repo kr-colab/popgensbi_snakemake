@@ -19,7 +19,14 @@ class dinf_extract:
         input : tree sequence of one population
         output : genotype matrix + positional encoding (dinf's format)
         '''
-        n_sample = int(ts.num_samples / self.ploidy)
+        if self.ploidy == 2:
+            if self.phased == False:
+                n_sample = int(ts.num_samples / self.ploidy)
+            else:
+                n_sample = ts.num_samples
+        elif self.ploidy == 1:
+            n_sample = ts.num_samples
+            
         extractor = dinf.feature_extractor.HaplotypeMatrix(
             num_individuals=n_sample, 
             num_loci=self.n_snps,
