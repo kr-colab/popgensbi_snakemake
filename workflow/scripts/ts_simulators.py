@@ -1,13 +1,11 @@
 import stdpopsim
-from process_ts import dinf_extract
 import torch
 from sbi.utils import BoxUniform
 
+## ts_simulators outputs tree sequence. This cannot be used as a simulator for simulate_for_sbi!
 class AraTha_2epoch_simulator:
     def __init__(self, 
                 n_sample=10, 
-                n_snps=2000, 
-                maf_thresh=0.05, 
                 N_A_true=746148,
                 N_0_true=100218,
                 t_1_true=56834,
@@ -22,8 +20,6 @@ class AraTha_2epoch_simulator:
                 mutation_rate_high=1.0e-8
                 ):
         self.n_sample = n_sample
-        self.n_snps = n_snps
-        self.maf_thresh = maf_thresh
         self.true_values = {"N_A": N_A_true, "N_0": N_0_true, "t_1": t_1_true, "mutation_rate": mutation_rate_true}
         self.bounds = {"N_A": (N_A_low, N_A_high),
                         "N_0": (N_0_low, N_0_high),
@@ -46,8 +42,5 @@ class AraTha_2epoch_simulator:
         engine = stdpopsim.get_engine("msprime")
 
         ts = engine.simulate(model, contig, samples={"pop_0": self.n_sample})
-        ploidy = 2
-        phased = False
-        result = dinf_extract(ts, self.n_sample, self.n_snps, ploidy, phased, self.maf_thresh)
 
-        return result
+        return ts

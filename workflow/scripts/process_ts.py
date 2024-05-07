@@ -1,19 +1,24 @@
-import dinf
+import tskit
+import os
+import defopt
+from ts_processors import *
 import torch
+from ts_simulators import *
+import numpy as np
 
-## Todo - Restructure simulate.py and process_ts.py so that ts gets processed after all of the siimulations?
-## (That is what happens if we pre-train an encoder to learn summary statistics)
-def dinf_extract(ts, n_sample, n_snps, ploidy, phased, maf_thresh):
-    '''
-    input : tree sequence of one population
-    output : genotype matrix + positional encoding (dinf's format)
-    '''
-    extractor = dinf.feature_extractor.HaplotypeMatrix(
-        num_individuals=n_sample, 
-        num_loci=n_snps,
-        ploidy=ploidy,
-        phased=phased,
-        maf_thresh=maf_thresh
-    )
-    feature_matrix = extractor.from_ts(ts)
-    return torch.from_numpy(feature_matrix).float().permute(2, 0, 1)
+def main(num_simulations: int, outdir: str):
+    with open(f"{outdir}/{num_simulations}.trees", "rb") as ts_file:
+        ts = tskit.load(ts_file)
+
+    # Todo : config parameter that chooses dinf_extract as an option and an if statement (arg == dinf_extract)
+
+    simulator = AraTha_2epoch_simulator()
+    n_sample = simulator.n_sample
+    processor = dinf_extract(n_snps=2000)
+    x = processor(ts)
+    # x is tensor, so change it to numpy first and save it as .npy
+    x = x.squeeze().cpu().numpy()
+    np.save(f"{outdir}/x_{num_simulations}.npy",x)
+ 
+if __name__ == "__main__":
+    defopt.run(main)

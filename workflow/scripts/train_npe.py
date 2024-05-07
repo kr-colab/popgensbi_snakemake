@@ -21,27 +21,23 @@ def load_data_files(data_dir: str):
 
     :returns: Tuple of torch.tensors of paramters, thetas, and simulated data, xs
     """
-    data_files = glob.glob(f"{data_dir}/rep*.npy")
+    x_files = glob.glob(os.path.join(data_dir, "x_*.npy"))
     xs = []
     thetas = []
-    for df in data_files:
-        simdata = np.load(df, allow_pickle=True).item()
-        xs.append(simdata["x"])
-        thetas.append(simdata["theta"])
-    Nsims = thetas[-1].shape[0]
-    Nreps = len(thetas)
-    theta_dim = thetas[-1].shape[-1]
-    x_shape = xs[-1].shape[1:]
-    xs = torch.from_numpy(np.array(xs).reshape((Nsims * Nreps, *x_shape)))
-    thetas = torch.from_numpy(np.array(thetas).reshape((Nsims * Nreps, theta_dim)))
+    for xf in x_files:
+        xs.append(np.load(xf))
+        # Separate out the variable nambe (what * is)
+        var = os.path.basename(xf)[2:-4]
+        # Use it to find the corresponding theta file
+        thetas.append(np.load(os.path.join(data_dir, f"theta_{var}.npy")))
+    xs = torch.from_numpy(np.array(xs))
+    thetas = torch.from_numpy(np.array(thetas))
     return thetas, xs
 
 
 def main(
     data_dir: str,
     outdir: str,
-    *,
-    prefix: str = "",
 ):
 
     thetas, xs = load_data_files(data_dir)
@@ -72,9 +68,7 @@ def main(
 
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
-    if prefix != "":
-        prefix += "_"
-    pkl_file = f"{outdir}/{prefix}posterior.pkl"
+    pkl_file = f"{outdir}/posterior.pkl"
     with open(pkl_file, "wb") as f:
         pickle.dump(posterior, f)
 
