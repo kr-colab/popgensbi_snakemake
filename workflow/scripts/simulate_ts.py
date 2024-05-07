@@ -13,25 +13,22 @@ from sbi.utils.user_input_checks import (
 import msprime
 import stdpopsim
 import os
-import defopt
 import numpy as np
 import pickle
 from ts_simulators import *
 
-def main(num_simulations: int, outdir: str):
-    if not os.path.isdir(outdir):
-        os.mkdir(outdir)
+outdir = snakemake.params.outdir
+num_simulations = snakemake.params.num_simulations
+if not os.path.isdir(outdir):
+    os.mkdir(outdir)
 
-    simulator = AraTha_2epoch_simulator()
-    prior = simulator.prior        
-    # Simulate only once (parallelized by snakemake)
-    # sample one theta
-    theta = prior.sample((1,))
-    ts = simulator(theta)
-    with open(f"{outdir}/{num_simulations}.trees", "wb") as ts_file:
-        ts.dump(ts_file)
-    theta = theta.squeeze().cpu().numpy()
-    np.save(f"{outdir}/theta_{num_simulations}.npy", theta)
-
-if __name__ == "__main__":
-    defopt.run(main)
+simulator = AraTha_2epoch_simulator()
+prior = simulator.prior        
+# Simulate only once (parallelized by snakemake)
+# sample one theta
+theta = prior.sample((1,))
+ts = simulator(theta)
+with open(f"{outdir}/{num_simulations}.trees", "wb") as ts_file:
+    ts.dump(ts_file)
+theta = theta.squeeze().cpu().numpy()
+np.save(f"{outdir}/theta_{num_simulations}.npy", theta)
