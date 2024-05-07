@@ -6,3 +6,4 @@ logs/**
 workflow/scripts/__pycache__/**
 workflow/results/**
 workflow/sbi-logs/**
+sbi-logs/**
