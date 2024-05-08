@@ -1,2 +1,4 @@
-n_train_sims_per_job: 25 # number of simulations per training data simulating job
-n_train_reps: 30 # number of training data simulation jobs to run
+n_train_sims: 5000 # number of simulations
+datadir: "results/AraTha_2epoch/data/"
+outdir: "results/AraTha_2epoch/posterior/"
+n_snps: 2000
