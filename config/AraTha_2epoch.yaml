@@ -1,0 +1,7 @@
+n_train_sims: 50000 # number of simulations
+datadir: "results/AraTha_2epoch/data/"
+outdir: "results/AraTha_2epoch/posterior/"
+demog_model: "AraTha_2epoch"
+ts_processor: "dinf"
+n_snps: 2000 # number of SNPs to use (for dinf)
+embedding_net: "ExchangeableCNN"
