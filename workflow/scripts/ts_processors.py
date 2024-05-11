@@ -1,18 +1,25 @@
 import dinf
 import torch
 
-# Change this to class
-# get n_sample from ts.num_sample, ploidy =2, phased = False
-# n_snps and maf_thresh are from config. (snakemake.params.)
 class dinf_extract:
-    def __init__(self, n_snps=500,
-                ploidy=2,
-                phased=False,
-                maf_thresh=0.05):
-        self.n_snps = n_snps
-        self.ploidy = ploidy
-        self.phased = phased
-        self.maf_thresh = maf_thresh
+    def __init__(self, snakemake):
+        try:
+            self.n_snps = snakemake.params.n_snps
+        except AttributeError:
+            self.n_snps = 500
+        try:
+            self.ploidy = snakemake.params.ploidy
+        except AttributeError:
+            self.ploidy = 2
+        try:
+            self.phased = snakemake.params.phased
+        except AttributeError:
+            self.phased = False
+        try:
+            self.maf_thresh = snakemake.params.maf_thresh
+        except AttributeError:
+            self.maf_thresh = 0.05
+
     def __call__(self, ts):
         
         '''
