@@ -22,7 +22,11 @@ num_simulations = snakemake.params.num_simulations
 if not os.path.isdir(outdir):
     os.mkdir(outdir)
 
-simulator = AraTha_2epoch_simulator()
+demog_model = snakemake.params.demog_model
+
+if demog_model == "AraTha_2epoch":
+    simulator = AraTha_2epoch_simulator(snakemake)
+
 prior = simulator.prior        
 # Simulate only once (parallelized by snakemake)
 # sample one theta
