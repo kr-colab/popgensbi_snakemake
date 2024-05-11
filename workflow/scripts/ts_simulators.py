@@ -4,27 +4,67 @@ from sbi.utils import BoxUniform
 
 ## ts_simulators outputs tree sequence. This cannot be used as a simulator for simulate_for_sbi!
 class AraTha_2epoch_simulator:
-    def __init__(self, 
-                n_sample=10, 
-                N_A_true=746148,
-                N_0_true=100218,
-                t_1_true=56834,
-                mutation_rate_true=7e-9, 
-                N_A_low=10_000,
-                N_A_high=1_000_000,
-                N_0_low=10_000,
-                N_0_high=1_000_000,
-                t_1_low=1_000,
-                t_1_high=1_000_000,
-                mutation_rate_low=0,
-                mutation_rate_high=1.0e-8
-                ):
-        self.n_sample = n_sample
-        self.true_values = {"N_A": N_A_true, "N_0": N_0_true, "t_1": t_1_true, "mutation_rate": mutation_rate_true}
-        self.bounds = {"N_A": (N_A_low, N_A_high),
-                        "N_0": (N_0_low, N_0_high),
-                        "t_1": (t_1_low, t_1_high),
-                        "mutation_rate": (mutation_rate_low, mutation_rate_high),
+    def __init__(self, snakemake):
+        species = stdpopsim.get_species("AraTha")
+        model = species.get_demographic_model("African2Epoch_1H18")
+        try:
+            self.n_sample = snakemake.params.n_sample
+        except AttributeError:
+            self.n_sample = 10
+        try:
+            self.N_A_true = snakemake.params.N_A_true
+        except AttributeError:
+            self.N_A_true = model.model.events[0].initial_size
+        try:
+            self.N_0_true = snakemake.params.N_0_true
+        except AttributeError:
+            self.N_0_true = model.populations[0].initial_size
+        try:
+            self.t_1_true = snakemake.params.t_1_true
+        except AttributeError:
+            self.t_1_true = model.model.events[0].time
+        try:
+            self.mutation_rate_true = snakemake.params.mutation_rate_true
+        except AttributeError:
+            self.mutation_rate_true = model.mutation_rate
+        try:
+            self.N_A_low = snakemake.params.N_A_low
+        except AttributeError:
+            self.N_A_low = 10_000
+        try:
+            self.N_A_high = snakemake.params.N_A_high
+        except AttributeError:
+            self.N_A_high = 1_000_000
+        try:
+            self.N_0_low = snakemake.params.N_0_low
+        except AttributeError:
+            self.N_0_low = 10_000
+        try:
+            self.N_0_high = snakemake.params.N_0_high
+        except AttributeError:
+            self.N_0_high = 1_000_000
+        try:
+            self.t_1_low = snakemake.params.t_1_low
+        except AttributeError:
+            self.t_1_low = 1_000
+        try:
+            self.t_1_high = snakemake.params.t_1_high
+        except AttributeError:
+            self.t_1_high = 1_000_000
+        try:
+            self.mutation_rate_low = snakemake.params.mutataion_rate_low
+        except AttributeError:
+            self.mutation_rate_low = 0
+        try:
+            self.mutation_rate_high = snakemake.params.mutation_rate_high
+        except AttributeError:
+            self.mutation_rate_high = 1.0e-8
+
+        self.true_values = {"N_A": self.N_A_true, "N_0": self.N_0_true, "t_1": self.t_1_true, "mutation_rate": self.mutation_rate_true}
+        self.bounds = {"N_A": (self.N_A_low, self.N_A_high),
+                        "N_0": (self.N_0_low, self.N_0_high),
+                        "t_1": (self.t_1_low, self.t_1_high),
+                        "mutation_rate": (self.mutation_rate_low, self.mutation_rate_high),
                         }
         low = [self.bounds[p][0] for p in self.bounds.keys()]
         high = [self.bounds[p][1] for p in self.bounds.keys()]
