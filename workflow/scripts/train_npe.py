@@ -9,6 +9,7 @@ import torch
 from sbi.inference import SNPE
 from sbi.inference.posteriors import DirectPosterior
 from sbi.utils import posterior_nn
+from natsort import natsorted
 
 def load_data_files(data_dir):
     """
@@ -19,7 +20,9 @@ def load_data_files(data_dir):
 
     :returns: Tuple of torch.tensors of paramters, thetas, and simulated data, xs
     """
-    x_files = glob.glob(os.path.join(data_dir, "x_*.npy"))
+    x_files_all = glob.glob(os.path.join(data_dir, "x_*.npy"))
+    # Making sure that we use 0 to n_train_sims-1
+    x_files = natsorted(x_files_all)[:snakemake.params.n_train_sims]
     xs = []
     thetas = []
     for xf in x_files:
@@ -37,10 +40,11 @@ data_dir = snakemake.params.datadir
 outdir = snakemake.params.outdir
 
 thetas, xs = load_data_files(data_dir)
-simulator = AraTha_2epoch_simulator()
+if snakemake.params.demog_model == "AraTha_2epoch":
+    simulator = AraTha_2epoch_simulator(snakemake)
 prior = simulator.prior
-# Todo : make the embedding network customizable
-embedding_net = ExchangeableCNN().cuda()
+if snakemake.params.embedding_net == "ExchangeableCNN":
+    embedding_net = ExchangeableCNN().cuda()
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
     z_score_x="none",
