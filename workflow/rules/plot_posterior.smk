@@ -11,10 +11,9 @@ rule plot_posterior:
     log: "logs/plot_posterior.log"
     resources:
         mem_mb="5000",
-        slurm_partition="kerngpu",
-        slurm_extra="--gres=gpu:1 --constraint=a100"
+        slurm_partition="gpu",
+        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
     params:
-        outdir=outdir,
-        n_snps=config["n_snps"]
+        **{k: v for k, v in config.items()}
     # scripts is outside rules
     script: "../scripts/plotting.py"
