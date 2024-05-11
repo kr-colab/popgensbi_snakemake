@@ -11,11 +11,15 @@ from ts_processors import *
 
 outdir = snakemake.params.outdir
 n_snps = snakemake.params.n_snps
+if snakemake.params.demog_model == "AraTha_2epoch":
+    simulator = AraTha_2epoch_simulator(snakemake)
 
-simulator = AraTha_2epoch_simulator()
 bounds = simulator.bounds
 theta_star = simulator.true_values
-ts_processor = dinf_extract(n_snps=n_snps)
+
+if snakemake.params.ts_processor == "dinf":
+    ts_processor = dinf_extract(snakemake)
+
 with open(f"{outdir}/posterior.pkl", "rb") as f:
     posterior = pickle.load(f)   
 
