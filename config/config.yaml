@@ -1,4 +1,0 @@
-n_train_sims: 5000 # number of simulations
-datadir: "results/AraTha_2epoch/data/"
-outdir: "results/AraTha_2epoch/posterior/"
-n_snps: 2000
