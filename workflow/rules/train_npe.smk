@@ -13,10 +13,9 @@ rule train_npe:
         os.path.join(outdir, "posterior.pkl"),
     resources:
         mem_mb="32000",
-        slurm_partition="kerngpu",
-        slurm_extra="--gres=gpu:1 --constraint=a100"
+        slurm_partition="gpu",
+        slurm_extra="--gres=gpu:1 --constraint=gpu-80gb"
     log: "logs/train_npe.log"
     params:
-        datadir=datadir,
-        outdir=outdir
+        **{k: v for k, v in config.items()}
     script: "../scripts/train_npe.py"
