@@ -9,8 +9,8 @@ import os
 configfile: "config/AraTha_2epoch.yaml"
 n_train_sims = config["n_train_sims"] # number of simulations for training NPE
 datadir = config["datadir"] # directory for training data
-outdir = config["outdir"] # output directory for posterior
-
+posteriordir = config["posteriordir"] # output directory for posterior
+total_rounds = config["total_rounds"]
 
 # Get the list of rule files
 rule_files = [os.path.join("rules/", f) for f in os.listdir("workflow/rules/") if f.endswith(".smk")]
@@ -22,9 +22,11 @@ for rule in rule_files:
 # Define the final target
 rule final:
     input:
-        expand(os.path.join(datadir, "{i}.trees"), i=range(n_train_sims)),
-        expand(os.path.join(datadir, "theta_{i}.npy"), i=range(n_train_sims)),
-        expand(os.path.join(datadir, "x_{j}.npy"), j=range(n_train_sims)),
-        os.path.join(outdir, "posterior.pkl"),
-        os.path.join(outdir, "default_obs_samples.npy"),
-        os.path.join(outdir, "default_obs_corner.png")
+        expand(os.path.join(datadir, "round_{k}/", "{i}.trees"), i=range(n_train_sims), k=list(range(total_rounds))),
+        expand(os.path.join(datadir, "round_{k}/", "theta_{i}.npy"), i=range(n_train_sims), k=list(range(total_rounds))),
+        expand(os.path.join(datadir, "round_{k}/", "x_{j}.npy"), j=range(n_train_sims), k=list(range(total_rounds))),
+        expand(os.path.join(posteriordir, "round_{k}/", "posterior.pkl"), k=list(range(total_rounds))),
+        expand(os.path.join(posteriordir, "round_{k}/", "default_obs_samples.npy"), k=list(range(total_rounds))),
+        expand(os.path.join(posteriordir, "round_{k}/", "default_obs_corner.png"), k=list(range(total_rounds)))
+        
+        # Running in talapas : snakemake --executor=slurm --set-resources train_npe:mem_mb="32000",slurm_partition="gpu",slurm_extra="--gres=gpu:1 --constraint=gpu-80gb"
