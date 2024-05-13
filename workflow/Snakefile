@@ -27,6 +27,6 @@ rule final:
         expand(os.path.join(datadir, "round_{k}/", "x_{j}.npy"), j=range(n_train_sims), k=list(range(total_rounds))),
         expand(os.path.join(posteriordir, "round_{k}/", "posterior.pkl"), k=list(range(total_rounds))),
         expand(os.path.join(posteriordir, "round_{k}/", "default_obs_samples.npy"), k=list(range(total_rounds))),
-        expand(os.path.join(posteriordir, "round_{k}/", "default_obs_corner.png"), k=list(range(total_rounds)))
-        
-        # Running in talapas : snakemake --executor=slurm --set-resources train_npe:mem_mb="32000",slurm_partition="gpu",slurm_extra="--gres=gpu:1 --constraint=gpu-80gb"
+        expand(os.path.join(posteriordir, "round_{k}/", "default_obs_corner.png"), k=list(range(total_rounds))),
+        os.path.join(datadir, "x_obs.npy"),
+        os.path.join(datadir, "ts_star.trees")

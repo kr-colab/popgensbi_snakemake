@@ -1,12 +1,27 @@
+rule simulate_default:
+    message:
+        "simulating with default thetas..."
+    output:
+        os.path.join(datadir, "x_obs.npy"),
+        os.path.join(datadir, "ts_star.trees")
+    log:
+        "logs/simulate_default.log"
+    params:
+        **{k: v for k, v in config.items()}
+    script:
+        "../scripts/simulate_default.py"
+
 rule simulate_ts:
     message:
         "simulating tree sequences for round {wildcards.k}..."
     input:
+        [
         lambda wildcards: os.path.join(posteriordir, "round_{}/posterior.pkl".format(int(wildcards.k) - 1)) if int(wildcards.k) >= 1 else [], 
-        lambda wildcards: os.path.join(datadir, "x_obs.npy") if int(wildcards.k) >= 1 else []
+        lambda wildcards: os.path.join(datadir, "x_obs.npy"),
+        ]
     output:
-        trees=os.path.join(datadir, "round_{k}/", "{i}.trees"),
-        theta=os.path.join(datadir, "round_{k}/", "theta_{i}.npy"),
+        os.path.join(datadir, "round_{k}/", "{i}.trees"),
+        os.path.join(datadir, "round_{k}/", "theta_{i}.npy"),
     log:
         "logs/simulate_ts_round_{k}_{i}.log"
     params:

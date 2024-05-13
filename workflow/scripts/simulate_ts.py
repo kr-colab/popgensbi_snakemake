@@ -28,13 +28,6 @@ if snakemake.params.ts_processor == "dinf":
 
 if int(rounds) == 0:
     proposal = simulator.prior
-    theta_star = simulator.true_values
-    ts_star = simulator(list(theta_star.values()))
-    if not os.path.isfile(os.path.join(datadir, "ts_star.trees")):
-        with open(os.path.join(datadir, "ts_star.trees"), "wb") as ts_file:
-            ts_star.dump(ts_file)
-        x_obs = processor(ts_star).squeeze().cpu().numpy()
-        np.save(os.path.join(datadir, "x_obs.npy"), x_obs)
 else:
     # Use previous round's posterior as proposal
     previous_round = int(rounds) - 1
