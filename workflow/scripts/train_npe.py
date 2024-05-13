@@ -36,11 +36,11 @@ def load_data_files(data_dir, rounds):
     return thetas, xs
 
 
-data_dir = snakemake.params.datadir
+datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
 rounds = snakemake.params.rounds
 
-thetas, xs = load_data_files(data_dir, rounds)
+thetas, xs = load_data_files(datadir, rounds)
 if snakemake.params.demog_model == "AraTha_2epoch":
     simulator = AraTha_2epoch_simulator(snakemake)
 prior = simulator.prior
@@ -75,3 +75,10 @@ if not os.path.isdir(os.path.join(posteriordir, f"round_{rounds}")):
 pkl_file = os.path.join(posteriordir, f"round_{rounds}/", "posterior.pkl")
 with open(pkl_file, "wb") as f:
     pickle.dump(posterior, f)
+
+# Draw set of thetas from the posterior for the next round of simulations
+x_obs = np.load(os.path.join(datadir, "x_obs.npy"))
+x_obs = x_obs.reshape(1, *x_obs.shape)
+proposal = posterior.set_default_x(torch.from_numpy(x_obs))
+thetas = proposal.sample((snakemake.params.n_train_sims,))
+np.save(os.path.join(datadir, f"round_{rounds}/", "thetas.npy"), thetas.cpu().numpy())
