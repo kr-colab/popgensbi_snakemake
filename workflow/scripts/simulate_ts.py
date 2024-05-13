@@ -28,17 +28,14 @@ if snakemake.params.ts_processor == "dinf":
 
 if int(rounds) == 0:
     proposal = simulator.prior
+    theta = proposal.sample((1,))
 else:
-    # Use previous round's posterior as proposal
+    # In rounds > 0, we have sampled thetas from the previous round posterior
     previous_round = int(rounds) - 1
-    with open(os.path.join(posteriordir, f"round_{previous_round}/", "posterior.pkl"), "rb") as f:
-        proposal = pickle.load(f)
-    x_obs = np.load(os.path.join(datadir, "x_obs.npy"))
-    # Reshape x_obs to (1, *x_obs.shape) so that it knows that batch size is 1
-    x_obs = x_obs.reshape(1, *x_obs.shape)
-    proposal = proposal.set_default_x(torch.from_numpy(x_obs))
-# Sample one theta from the proposal (parallelization handled by snakemake)
-theta = proposal.sample((1,))
+    thetas = np.load(os.path.join(datadir, f"round_{previous_round}/", "thetas.npy"))
+    # use one of the thetas (num_simulations-th) as the theta for the current simulation
+    theta = torch.from_numpy(thetas[int(num_simulations), :])
+
 ts = simulator(theta)
 with open(os.path.join(datadir, f"round_{rounds}/", f"{num_simulations}.trees"), "wb") as ts_file:
     ts.dump(ts_file)

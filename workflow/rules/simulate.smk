@@ -15,10 +15,7 @@ rule simulate_ts:
     message:
         "simulating tree sequences for round {wildcards.k}..."
     input:
-        [
-        lambda wildcards: os.path.join(posteriordir, "round_{}/posterior.pkl".format(int(wildcards.k) - 1)) if int(wildcards.k) >= 1 else [], 
-        lambda wildcards: os.path.join(datadir, "x_obs.npy"),
-        ]
+        lambda wildcards: os.path.join(datadir, "round_{}/thetas.npy".format(int(wildcards.k) -1)) if int(wildcards.k) >= 1 else []
     output:
         os.path.join(datadir, "round_{k}/", "{i}.trees"),
         os.path.join(datadir, "round_{k}/", "theta_{i}.npy"),
