@@ -5,11 +5,12 @@ import torch
 from ts_simulators import *
 import numpy as np
 
-outdir = snakemake.params.outdir
+datadir = snakemake.params.datadir
 num_simulations = snakemake.params.num_simulations
 n_snps = snakemake.params.n_snps
+rounds = snakemake.params.rounds
 
-with open(f"{outdir}/{num_simulations}.trees", "rb") as ts_file:
+with open(f"{datadir}/round_{rounds}/{num_simulations}.trees", "rb") as ts_file:
     ts = tskit.load(ts_file)
 
 if snakemake.params.ts_processor == "dinf":
@@ -18,4 +19,4 @@ if snakemake.params.ts_processor == "dinf":
 x = processor(ts)
 # x is tensor, so change it to numpy first and save it as .npy
 x = x.squeeze().cpu().numpy()
-np.save(f"{outdir}/x_{num_simulations}.npy",x)
+np.save(f"{datadir}/round_{rounds}/x_{num_simulations}.npy",x)
