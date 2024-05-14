@@ -22,6 +22,9 @@ demog_model = snakemake.params.demog_model
 
 if demog_model == "AraTha_2epoch":
     simulator = AraTha_2epoch_simulator(snakemake)
+elif demog_model == "HomSap_2epoch":
+    simulator = HomSap_Africa_1b08_simulator(snakemake)
+
 if snakemake.params.ts_processor == "dinf":
     processor = dinf_extract(snakemake)
 
