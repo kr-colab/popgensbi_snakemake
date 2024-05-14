@@ -1,6 +1,7 @@
 import stdpopsim
 import torch
 from sbi.utils import BoxUniform
+import numpy as np
 
 ## ts_simulators outputs tree sequence. This cannot be used as a simulator for simulate_for_sbi!
 class AraTha_2epoch_simulator:
@@ -167,9 +168,9 @@ class HomSap_Africa_1b08_simulator:
 
         return ts
 
-class gamma_DFE_cnst_popsize:
+class gammaDFE_cnst_N_simulator:
     def __init__(self, snakemake):
-        speceis = stdpopsim.get_species("HomSap")
+        species = stdpopsim.get_species("HomSap")
         contig = species.get_contig('chr1', left=0, right=1e6)
         dfe = species.get_dfe("Gamma_K17")
         try:
@@ -177,21 +178,21 @@ class gamma_DFE_cnst_popsize:
         except AttributeError:
             self.n_sample = 100
         try:
-            self.mutation_rate = snakemake.params.mutation_rate
+            self.mutation_rate_true = snakemake.params.mutation_rate_true
         except AttributeError:
-            self.mutation_rate = contig.mutation_rate
+            self.mutation_rate_true = contig.mutation_rate
         try:
-            self.shape = snakemake.params.shape
+            self.shape_true = snakemake.params.shape_true
         except AttributeError:
-            self.shape = dfe.mutation_types[1].distribution_args[1]
+            self.shape_true = dfe.mutation_types[1].distribution_args[1]
         try:
-            self.mean = snakemake.params.mean
+            self.mean_true = snakemake.params.mean_true
         except AttributeError:
-            self.mean = dfe.mutation_types[1].distribution_args[0]
+            self.mean_true = dfe.mutation_types[1].distribution_args[0]
         try:
-            self.p = snakemake.params.p
+            self.p_true = snakemake.params.p_true
         except AttributeError:
-            self.p = dfe.proportions[1] / sum(dfe.proportions)
+            self.p_true = dfe.proportions[1] / sum(dfe.proportions)
         try:
             self.mutation_rate_low = snakemake.params.mutation_rate_low
         except AttributeError:
@@ -224,6 +225,10 @@ class gamma_DFE_cnst_popsize:
             self.p_high = snakemake.params.p_high
         except AttributeError:
             self.p_high = 0.8
+        try:
+            self.N = snakemake.params.N
+        except AttributeError:
+            self.N = 10000
         self.true_values = {"mutation_rate": self.mutation_rate_true, "mean": self.mean_true, "shape": self.shape_true, "p": self.p_true}
         self.bounds = {"mutation_rate": (self.mutation_rate_low, self.mutation_rate_high),
                         "mean": (self.mean_low, self.mean_high),
@@ -248,7 +253,7 @@ class gamma_DFE_cnst_popsize:
         dfe.mutation_types[1].distribution_args = [mean, shape]
         dfe.proportions = [1-p, p]
         contig.add_dfe(intervals=np.array([[0, int(contig.length)]]), DFE=dfe)
-        model = stdpopsim.PiecewiseConstantSize(10000)
+        model = stdpopsim.PiecewiseConstantSize(self.N)
         engine = stdpopsim.get_engine("slim")
 
         ts = engine.simulate(model, contig, samples={"pop_0": self.n_sample})
