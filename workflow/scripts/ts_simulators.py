@@ -85,7 +85,7 @@ class AraTha_2epoch_simulator:
         model.model.events[0].time = t_1
         engine = stdpopsim.get_engine("msprime")
 
-        ts = engine.simulate(model, contig, samples={"pop_0": self.n_sample})
+        ts = engine.simulate(model, contig, samples={"SouthMiddleAtlas": self.n_sample})
 
         return ts
 
@@ -170,7 +170,7 @@ class HomSap_Africa_1b08_simulator:
         model.model.events[0].time = t_1
         engine = stdpopsim.get_engine("msprime")
 
-        ts = engine.simulate(model, contig, samples={"pop_0": self.n_sample})
+        ts = engine.simulate(model, contig, samples={"African_Americans": self.n_sample})
 
         return ts
 
