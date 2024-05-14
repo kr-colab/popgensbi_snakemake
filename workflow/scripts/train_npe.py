@@ -2,8 +2,8 @@ import glob
 import os
 import pickle
 
-from embedding_networks import ExchangeableCNN
-from ts_simulators import AraTha_2epoch_simulator
+from embedding_networks import *
+from ts_simulators import *
 import numpy as np
 import torch
 from sbi.inference import SNPE
@@ -43,9 +43,19 @@ rounds = snakemake.params.rounds
 thetas, xs = load_data_files(datadir, rounds)
 if snakemake.params.demog_model == "AraTha_2epoch":
     simulator = AraTha_2epoch_simulator(snakemake)
+elif snakemake.params.demog_model == "HomSap_2epoch":
+    simulator = HomSap_Africa_1b08_simulator(snakemake)
+elif snakemake.params.demog_model == "gammaDFE_cnst_N":
+    simulator = gammaDFE_cnst_N_simulator(snakemake)
+
 prior = simulator.prior
+
 if snakemake.params.embedding_net == "ExchangeableCNN":
-    embedding_net = ExchangeableCNN().cuda()
+    if snakemake.params.ts_processor == "dinf":
+        embedding_net = ExchangeableCNN().cuda()
+    elif snakemake.params.ts_processor == "three_channel_feature_matrices":
+        embedding_net = ExchangeableCNN(channels=3).cuda()
+
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
     z_score_x="none",
