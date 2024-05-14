@@ -79,7 +79,10 @@ class AraTha_2epoch_simulator:
         
         species = stdpopsim.get_species("AraTha")
         contig = species.get_contig(length=10e6, mutation_rate=mutation_rate)
-        model = stdpopsim.PiecewiseConstantSize(N_A, (t_1, N_0))
+        model = species.get_demographic_model("African2Epoch_1H18")
+        model.populations[0].initial_size = N_0
+        model.model.events[0].initial_size = N_A
+        model.model.events[0].time = t_1
         engine = stdpopsim.get_engine("msprime")
 
         ts = engine.simulate(model, contig, samples={"pop_0": self.n_sample})
@@ -161,7 +164,10 @@ class HomSap_Africa_1b08_simulator:
         
         species = stdpopsim.get_species("HomSap")
         contig = species.get_contig(length=10e6, mutation_rate=mutation_rate)
-        model = stdpopsim.PiecewiseConstantSize(N_A, (t_1, N_0))
+        model = species.get_demographic_model("Africa_1B08")
+        model.populations[0].initial_size = N_0
+        model.model.events[0].initial_size = N_A
+        model.model.events[0].time = t_1
         engine = stdpopsim.get_engine("msprime")
 
         ts = engine.simulate(model, contig, samples={"pop_0": self.n_sample})
