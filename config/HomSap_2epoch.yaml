@@ -1,8 +1,8 @@
-n_train_sims: 1000 # number of simulations per rounds
+n_train_sims: 3 # number of simulations per rounds
 datadir: "results/HomSap_2epoch/data/"
 posteriordir: "results/HomSap_2epoch/posterior/"
 demog_model: "HomSap_2epoch"
 ts_processor: "dinf"
 n_snps: 2000 # number of SNPs to use (for dinf)
 embedding_net: "ExchangeableCNN"
-total_rounds: 10 # number of rounds
+total_rounds: 3 # number of rounds
