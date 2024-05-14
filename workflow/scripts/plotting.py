@@ -16,7 +16,9 @@ if snakemake.params.demog_model == "AraTha_2epoch":
     simulator = AraTha_2epoch_simulator(snakemake)
 elif snakemake.params.demog_model == "HomSap_2epoch":
     simulator = HomSap_Africa_1b08_simulator(snakemake)
-
+elif snakemake.params.demog_model == "gammaDFE_cnst_N":
+    simulator = gammaDFE_cnst_N_simulator(snakemake)
+    
 bounds = simulator.bounds
 theta_star = simulator.true_values
 
