@@ -6,7 +6,7 @@
 import os
 
 # Set up config
-configfile: "config/gammaDFE_cnst_N_sfs.yaml"
+configfile: "config/AraTha_2epoch_sfs.yaml"
 n_train_sims = config["n_train_sims"] # number of simulations for training NPE
 datadir = config["datadir"] # directory for training data
 posteriordir = config["posteriordir"] # output directory for posterior

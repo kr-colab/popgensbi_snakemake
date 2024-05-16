@@ -11,22 +11,8 @@ datadir = snakemake.params.datadir
 if not os.path.isdir(f"{datadir}/"):
     os.mkdir(f"{datadir}/")
 
-demog_model = snakemake.params.demog_model
-if demog_model == "AraTha_2epoch":
-    simulator = AraTha_2epoch_simulator(snakemake)
-elif demog_model == "HomSap_2epoch":
-    simulator = HomSap_Africa_1b08_simulator(snakemake)
-elif demog_model == "gammaDFE_cnst_N":
-    simulator = gammaDFE_cnst_N_simulator(snakemake)
-
-if snakemake.params.ts_processor == "dinf":
-    processor = dinf_extract(snakemake)
-elif snakemake.params.ts_processor == "three_channel_feature_matrices":
-    processor = three_channel_feature_matrices(snakemake)
-elif snakemake.params.ts_processor == "tskit_sfs":
-    processor = tskit_sfs(snakemake)
-elif snakemake.params.ts_processor == "tskit_sfs_selection":
-    processor = tskit_sfs_selection(snakemake)
+simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
+processor = PROCESSOR_LIST[snakemake.params.ts_processor](snakemake)
 
 theta_star = simulator.true_values
 ts_star = simulator(list(theta_star.values()))

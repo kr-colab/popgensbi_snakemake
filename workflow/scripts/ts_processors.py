@@ -2,27 +2,26 @@ import dinf
 import torch
 import numpy as np
 
-class dinf_extract:
-    def __init__(self, snakemake):
-        try:
-            self.n_snps = snakemake.params.n_snps
-        except AttributeError:
-            self.n_snps = 500
-        try:
-            self.ploidy = snakemake.params.ploidy
-        except AttributeError:
-            self.ploidy = 2
-        try:
-            self.phased = snakemake.params.phased
-        except AttributeError:
-            self.phased = False
-        try:
-            self.maf_thresh = snakemake.params.maf_thresh
-        except AttributeError:
-            self.maf_thresh = 0.05
-
-    def __call__(self, ts):
+class BaseProcessor:
+    def __init__(self, snakemake, params_default):
+        for key, default in params_default.items():
+            if key in snakemake.params:
+                setattr(self, key, snakemake.params[key])
+            else:
+                setattr(self, key, default) 
         
+
+class dinf_extract(BaseProcessor):
+    params_default = {
+        "n_snps": 500,
+        "ploidy": 2,
+        "phased": False,
+        "maf_thresh": 0.05
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, dinf_extract.params_default)
+
+    def __call__(self, ts):        
         '''
         input : tree sequence of one population
         output : genotype matrix + positional encoding (dinf's format)
@@ -45,16 +44,13 @@ class dinf_extract:
         feature_matrix = extractor.from_ts(ts)
         return torch.from_numpy(feature_matrix).float().permute(2, 0, 1)
 
-class three_channel_feature_matrices:
+class three_channel_feature_matrices(BaseProcessor):
+    params_default = {
+        "n_snps": 500,
+        "maf_thresh": 0.05
+    }
     def __init__(self, snakemake):
-        try:
-            self.n_snps = snakemake.params.n_snps
-        except AttributeError:
-            self.n_snps = 500
-        try:
-            self.maf_thresh = snakemake.params.maf_thresh
-        except AttributeError:
-            self.maf_thresh = 0.05
+        super().__init__(snakemake, three_channel_feature_matrices.params_default)
 
     def __call__(self, ts):
 
@@ -115,44 +111,65 @@ class three_channel_feature_matrices:
 
             return torch.from_numpy(feature_matrix).float().permute(2, 0, 1)
 
-class tskit_sfs:
+
+class tskit_sfs(BaseProcessor):
+    params_default = {
+        "sample_sets": None,
+        "windows": None,
+        "mode": "site",
+        "span_normalise": True,
+        "polarised": False
+    }
     def __init__(self, snakemake):
-        try:
-            self.sample_sets = snakemake.params.sample_sets
-        except AttributeError:
-            self.sample_sets = None
+        super().__init__(snakemake, tskit_sfs.params_default)
     def __call__(self, ts):
-        if self.sample_sets is None:
-            sample_sets = [ts.samples()]
-        else:
-            sample_sets = self.sample_sets
-        sfs = ts.allele_frequency_spectrum(sample_sets = sample_sets)
+        sfs = ts.allele_frequency_spectrum(
+            sample_sets = self.sample_sets, 
+            windows = self.windows, 
+            mode = self.mode, 
+            span_normalise = self.span_normalise, 
+            polarised = self.polarised)
         return torch.from_numpy(sfs).float()
 
-class tskit_sfs_selection:
+class tskit_sfs_selection(BaseProcessor):
     ## get SFS with synnonymous and non-synonymous mutations separately and append the two arrays to get a single array
+    params_default = {
+        "span_normalise": True,
+        "polarised": False
+    }
     def __init__(self, snakemake):
-        try:
-            self.sample_sets = snakemake.params.sample_sets
-        except AttributeError:
-            self.sample_sets = None
+        super().__init__(snakemake, tskit_sfs_selection.params_default)
     def __call__(self, ts):
-        if self.sample_sets is None:
-            sample_sets = [ts.samples()]
-        else:
-            sample_sets = self.sample_sets
         nonsyn_counts = []
         syn_counts = []
         for var in ts.variants():
-            genotype_sample_set = var.genotypes[sample_sets[0]]
+            count = sum(var.genotypes)
+            # If there are multiple mutations at a site, the last mutation is considered
             if var.site.mutations[-1].metadata['mutation_list'][-1]['mutation_type']==2:
-                nonsyn_counts.append(sum(genotype_sample_set))
+                if self.polairised:
+                    nonsyn_counts.append(min(count, ts.num_samples - count))
+                else:
+                    nonsyn_counts.append(count)
             else:
-                syn_counts.append(sum(genotype_sample_set))
+                if self.polairised:
+                    syn_counts.append(min(count, ts.num_samples - count))
+                else:
+                    syn_counts.append(count)
         
         # compute span normalized SFS (length = ts.num_samples + 1 like in tskit)
-        nonsyn_sfs = np.histogram(nonsyn_counts, bins = np.arange(-0.5, ts.num_samples + 1.5))[0] / ts.sequence_length
-        syn_sfs = np.histogram(syn_counts, bins = np.arange(-0.5, ts.num_samples + 1.5))[0] / ts.sequence_length
+        nonsyn_sfs = np.histogram(nonsyn_counts, bins = np.arange(-0.5, ts.num_samples + 1.5))[0]
+        syn_sfs = np.histogram(syn_counts, bins = np.arange(-0.5, ts.num_samples + 1.5))[0]
+
+        if self.span_normalise:
+            nonsyn_sfs = nonsyn_sfs / ts.sequence_length
+            syn_sfs = syn_sfs / ts.sequence_length
         
         sfs_combined = np.append(nonsyn_sfs, syn_sfs)
         return torch.from_numpy(sfs_combined).float()
+
+PROCESSOR_LIST = {
+    "dinf": dinf_extract,
+    "three_channel_feature_matrices": three_channel_feature_matrices,
+    "tskit_sfs": tskit_sfs,
+    "tskit_sfs_selection": tskit_sfs_selection
+}

@@ -42,14 +42,10 @@ posteriordir = snakemake.params.posteriordir
 rounds = snakemake.params.rounds
 
 thetas, xs = load_data_files(datadir, rounds)
-if snakemake.params.demog_model == "AraTha_2epoch":
-    simulator = AraTha_2epoch_simulator(snakemake)
-elif snakemake.params.demog_model == "HomSap_2epoch":
-    simulator = HomSap_Africa_1b08_simulator(snakemake)
-elif snakemake.params.demog_model == "gammaDFE_cnst_N":
-    simulator = gammaDFE_cnst_N_simulator(snakemake)
+simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 
 prior = simulator.prior
+
 
 if snakemake.params.embedding_net == "ExchangeableCNN":
     if snakemake.params.ts_processor == "dinf":
