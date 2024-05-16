@@ -11,7 +11,7 @@ from ts_processors import *
 datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
 rounds = snakemake.params.rounds
-n_snps = snakemake.params.n_snps
+
 if snakemake.params.demog_model == "AraTha_2epoch":
     simulator = AraTha_2epoch_simulator(snakemake)
 elif snakemake.params.demog_model == "HomSap_2epoch":

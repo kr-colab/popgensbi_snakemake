@@ -23,6 +23,10 @@ if snakemake.params.ts_processor == "dinf":
     processor = dinf_extract(snakemake)
 elif snakemake.params.ts_processor == "three_channel_feature_matrices":
     processor = three_channel_feature_matrices(snakemake)
+elif snakemake.params.ts_processor == "tskit_sfs":
+    processor = tskit_sfs(snakemake)
+elif snakemake.params.ts_processor == "tskit_sfs_selection":
+    processor = tskit_sfs_selection(snakemake)
 
 theta_star = simulator.true_values
 ts_star = simulator(list(theta_star.values()))

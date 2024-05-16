@@ -114,3 +114,45 @@ class three_channel_feature_matrices:
             feature_matrix[..., 2] = np.tile(mut_types, [gm.shape[1], 1])
 
             return torch.from_numpy(feature_matrix).float().permute(2, 0, 1)
+
+class tskit_sfs:
+    def __init__(self, snakemake):
+        try:
+            self.sample_sets = snakemake.params.sample_sets
+        except AttributeError:
+            self.sample_sets = None
+    def __call__(self, ts):
+        if self.sample_sets is None:
+            sample_sets = [ts.samples()]
+        else:
+            sample_sets = self.sample_sets
+        sfs = ts.allele_frequency_spectrum(sample_sets = sample_sets)
+        return torch.from_numpy(sfs).float()
+
+class tskit_sfs_selection:
+    ## get SFS with synnonymous and non-synonymous mutations separately and append the two arrays to get a single array
+    def __init__(self, snakemake):
+        try:
+            self.sample_sets = snakemake.params.sample_sets
+        except AttributeError:
+            self.sample_sets = None
+    def __call__(self, ts):
+        if self.sample_sets is None:
+            sample_sets = [ts.samples()]
+        else:
+            sample_sets = self.sample_sets
+        nonsyn_counts = []
+        syn_counts = []
+        for var in ts.variants():
+            genotype_sample_set = var.genotypes[sample_sets[0]]
+            if var.site.mutations[-1].metadata['mutation_list'][-1]['mutation_type']==2:
+                nonsyn_counts.append(sum(genotype_sample_set))
+            else:
+                syn_counts.append(sum(genotype_sample_set))
+        
+        # compute span normalized SFS (length = ts.num_samples + 1 like in tskit)
+        nonsyn_sfs = np.histogram(nonsyn_counts, bins = np.arange(-0.5, ts.num_samples + 1.5))[0] / ts.sequence_length
+        syn_sfs = np.histogram(syn_counts, bins = np.arange(-0.5, ts.num_samples + 1.5))[0] / ts.sequence_length
+        
+        sfs_combined = np.append(nonsyn_sfs, syn_sfs)
+        return torch.from_numpy(sfs_combined).float()

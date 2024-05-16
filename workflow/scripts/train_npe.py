@@ -3,6 +3,7 @@ import os
 import pickle
 
 from embedding_networks import *
+from sbi.neural_nets.embedding_nets import *
 from ts_simulators import *
 import numpy as np
 import torch
@@ -55,6 +56,8 @@ if snakemake.params.embedding_net == "ExchangeableCNN":
         embedding_net = ExchangeableCNN().cuda()
     elif snakemake.params.ts_processor == "three_channel_feature_matrices":
         embedding_net = ExchangeableCNN(channels=3).cuda()
+elif snakemake.params.embedding_net == "MLP":
+    embedding_net = FCEmbedding(input_dim = xs.shape[-1]).cuda()
 
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",

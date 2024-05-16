@@ -1,0 +1,7 @@
+n_train_sims: 3 # number of simulations per rounds
+datadir: "results/AraTha_2epoch_sfs/data/"
+posteriordir: "results/AraTha_2epoch_sfs/posterior/"
+demog_model: "AraTha_2epoch"
+ts_processor: "tskit_sfs"
+embedding_net: "MLP"
+total_rounds: 3 # number of rounds
