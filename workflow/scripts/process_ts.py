@@ -12,14 +12,7 @@ rounds = snakemake.params.rounds
 with open(f"{datadir}/round_{rounds}/{num_simulations}.trees", "rb") as ts_file:
     ts = tskit.load(ts_file)
 
-if snakemake.params.ts_processor == "dinf":
-    processor = dinf_extract(snakemake)
-elif snakemake.params.ts_processor == "three_channel_feature_matrices":
-    processor = three_channel_feature_matrices(snakemake)
-elif snakemake.params.ts_processor == "tskit_sfs":
-    processor = tskit_sfs(snakemake)
-elif snakemake.params.ts_processor == "tskit_sfs_selection":
-    processor = tskit_sfs_selection(snakemake)
+processor = PROCESSOR_LIST[snakemake.params.ts_processor](snakemake)
 
 x = processor(ts)
 # x is tensor, so change it to numpy first and save it as .npy
