@@ -146,12 +146,12 @@ class tskit_sfs_selection(BaseProcessor):
             count = sum(var.genotypes)
             # If there are multiple mutations at a site, the last mutation is considered
             if var.site.mutations[-1].metadata['mutation_list'][-1]['mutation_type']==2:
-                if self.polairised:
+                if self.polarised:
                     nonsyn_counts.append(min(count, ts.num_samples - count))
                 else:
                     nonsyn_counts.append(count)
             else:
-                if self.polairised:
+                if self.polarised:
                     syn_counts.append(min(count, ts.num_samples - count))
                 else:
                     syn_counts.append(count)
