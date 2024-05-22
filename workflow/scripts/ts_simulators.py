@@ -163,9 +163,61 @@ class gammaDFE_cnst_N_simulator(BaseSimulator):
 
         return ts
 
+class AnaPla_split_migration_simulator(BaseSimulator):
+    species = stdpopsim.get_species("AnaPla")
+    model = species.get_demographic_model("MallardBlackDuck_2L19")
+    params_default = {
+        "samples": {"Mallard": 10, "Black_duck": 10}, 
+        "N_A_true": model.populations[-1].initial_size, # ancestral population size
+        "N_B_true": model.populations[0].initial_size, # Black duck population size
+        "N_M_true": model.populations[1].initial_size, # Mallard population size
+        "T_true": model.model.events[0].time, # split time
+        "m_true": model.model.migration_matrix[0, 1], # migration rate
+        "N_A_low": 1e3,
+        "N_A_high": 1e7,
+        "N_B_low": 1e3,
+        "N_B_high": 1e7,
+        "N_M_low": 1e3,
+        "N_M_high": 1e7,
+        "T_low": 1e3,
+        "T_high": 1e7,
+        "m_low": 0,
+        "m_high": 1e-1,
+        "contig_length": 1e6
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, AnaPla_split_migration_simulator.params_default)
+        self.true_values = {"N_A": self.N_A_true, "N_B": self.N_B_true, "N_M": self.N_M_true, "T": self.T_true, "m": self.m_true}
+        self.bounds = {"N_A": (self.N_A_low, self.N_A_high),
+                        "N_B": (self.N_B_low, self.N_B_high),
+                        "N_M": (self.N_M_low, self.N_M_high),
+                        "T": (self.T_low, self.T_high),
+                        "m": (self.m_low, self.m_high),
+                        }
+        low = [self.bounds[p][0] for p in self.bounds.keys()]
+        high = [self.bounds[p][1] for p in self.bounds.keys()]
+        self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
+    def __call__(self, theta):
+        if type(theta) is torch.Tensor:
+            N_A, N_B, N_M, T, m = theta.squeeze().cpu().tolist()
+        elif type(theta) is list:
+            N_A, N_B, N_M, T, m = theta
+        
+        model = AnaPla_split_migration_simulator.model
+        model.populations[-1].initial_size = N_A
+        model.populations[0].initial_size = N_B
+        model.populations[1].initial_size = N_M
+        model.model.events[0].time = T
+        model.model.migration_matrix[0, 1] = m
+        model.model.migration_matrix[1, 0] = m
+        contig = self.species.get_contig(length=self.contig_length, mutation_rate=model.mutation_rate)
+        engine = stdpopsim.get_engine("msprime")
+        ts = engine.simulate(model, contig, samples=self.samples)
+        return ts
 
 MODEL_LIST = {
     "AraTha_2epoch": AraTha_2epoch_simulator,
     "HomSap_2epoch": HomSap_Africa_1b08_simulator,
-    "gammaDFE_cnst_N": gammaDFE_cnst_N_simulator
+    "gammaDFE_cnst_N": gammaDFE_cnst_N_simulator,
+    "AnaPla_split_migration": AnaPla_split_migration_simulator
 }

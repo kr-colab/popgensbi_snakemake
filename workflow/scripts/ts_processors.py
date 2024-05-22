@@ -44,6 +44,47 @@ class dinf_extract(BaseProcessor):
         feature_matrix = extractor.from_ts(ts)
         return torch.from_numpy(feature_matrix).float().permute(2, 0, 1)
 
+class dinf_extract_multiple_pops(BaseProcessor):
+    params_default = {
+        "ploidy": 2,
+        "phased": False,
+        "maf_thresh": 0.05
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, dinf_extract.params_default)
+
+    def __call__(self, ts):        
+        '''
+        input : tree sequence of one population
+        output : genotype matrix + positional encoding (dinf's format)
+        '''
+        from dinf.misc import ts_individuals
+        # recover population names and corresponding sampled individuals
+        pop_names = [pop.metadata['name'] for pop in ts.populations()]
+        individuals = {name: ts_individuals(ts, name) for name in pop_names}
+        num_individuals = {name: len(individuals[name]) for name in pop_names}
+
+            
+        extractor = dinf.feature_extractor.MultipleFeatureMatrices(
+            num_individuals=num_individuals, 
+            num_loci=self.n_snps,
+            ploidy=self.ploidy,
+            global_phased={pop: self.phased for pop in pop_names},
+            global_maf_thresh={pop: self.maf_thresh for pop in pop_names}
+        )
+        # we get a dictionary of feature matrices, one for each population
+        feature_matrices = extractor.from_ts(ts, individuals=individuals)
+        # Each feature matrix has dimension of (num_individual, num_loci, 2). 
+        # because num_individual can be different for each population, we need to pad them with -1
+        max_num_individuals = max([num_individuals[pop] for pop in pop_names])
+        for pop in pop_names:
+            num_individuals = feature_matrices[pop].shape[0]
+            if num_individuals < max_num_individuals:
+                feature_matrices[pop] = np.concatenate([feature_matrices[pop], -np.ones((max_num_individuals - num_individuals, self.n_snps, 2))])
+        output_mat = torch.stack([v for v in torch.from_numpy(feature_matrices.values())]).permute(0, 3, 1, 2)
+        return output_mat
+
+
 class three_channel_feature_matrices(BaseProcessor):
     params_default = {
         "n_snps": 500,
@@ -169,6 +210,7 @@ class tskit_sfs_selection(BaseProcessor):
 
 PROCESSOR_LIST = {
     "dinf": dinf_extract,
+    "dinf_multiple_pops": dinf_extract_multiple_pops,
     "three_channel_feature_matrices": three_channel_feature_matrices,
     "tskit_sfs": tskit_sfs,
     "tskit_sfs_selection": tskit_sfs_selection
