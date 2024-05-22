@@ -65,7 +65,7 @@ class dinf_extract_multiple_pops(BaseProcessor):
         num_individuals = {name: len(individuals[name]) for name in pop_names}
 
             
-        extractor = dinf.feature_extractor.MultipleFeatureMatrices(
+        extractor = dinf.feature_extractor.MultipleHaplotypeMatrices(
             num_individuals=num_individuals, 
             num_loci=self.n_snps,
             ploidy=self.ploidy,
