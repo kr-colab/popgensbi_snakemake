@@ -70,7 +70,6 @@ inference = SNPE(
 )
 posterior_estimator = inference.append_simulations(thetas, xs).train(
     show_train_summary=True,
-    retrain_from_scratch=True,
     validation_fraction=0.2,
 )
 posterior = DirectPosterior(
