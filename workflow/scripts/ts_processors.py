@@ -241,5 +241,6 @@ PROCESSOR_LIST = {
     "dinf_multiple_pops": dinf_extract_multiple_pops,
     "three_channel_feature_matrices": three_channel_feature_matrices,
     "tskit_sfs": tskit_sfs,
+    "tskit_jsfs": tskit_jsfs,
     "tskit_sfs_selection": tskit_sfs_selection
 }

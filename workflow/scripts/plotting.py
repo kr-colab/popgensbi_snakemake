@@ -17,7 +17,7 @@ simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 bounds = simulator.bounds
 theta_star = simulator.true_values
 
-with open(f"{posteriordir}/round_{rounds}/posterior.pkl", "rb") as f:
+with open(f"{posteriordir}/round_{rounds}/ensemble_posterior.pkl", "rb") as f:
     posterior = pickle.load(f)   
 
 try:

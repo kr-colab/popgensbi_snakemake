@@ -1,8 +1,9 @@
-n_train_sims: 5000 # number of simulations per rounds
+n_train_sims: 5 # number of simulations per rounds
 datadir: "results/AraTha_2epoch/data/"
 posteriordir: "results/AraTha_2epoch/posterior/"
 demog_model: "AraTha_2epoch"
 ts_processor: "dinf"
 n_snps: 2000 # number of SNPs to use (for dinf)
 embedding_net: "ExchangeableCNN"
-total_rounds: 5 # number of rounds
+total_rounds: 2 # number of rounds
+n_ensemble: 3 # number of ensemble members

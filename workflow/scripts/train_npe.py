@@ -40,6 +40,7 @@ def load_data_files(data_dir, rounds):
 datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
 rounds = snakemake.params.rounds
+ensemble = snakemake.params.ensemble
 
 thetas, xs = load_data_files(datadir, rounds)
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
@@ -54,6 +55,8 @@ if snakemake.params.embedding_net == "ExchangeableCNN":
         embedding_net = ExchangeableCNN(channels=3).cuda()
 elif snakemake.params.embedding_net == "MLP":
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).cuda()
+elif snakemake.params.embedding_net == "CNN":
+    embedding_net = CNNEmbedding(input_shape=xs.shape[1:]).cuda()
 
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
@@ -80,13 +83,8 @@ posterior = DirectPosterior(
 
 if not os.path.isdir(os.path.join(posteriordir, f"round_{rounds}")):
     os.mkdir(os.path.join(posteriordir, f"round_{rounds}"))
-pkl_file = os.path.join(posteriordir, f"round_{rounds}/", "posterior.pkl")
+pkl_file = os.path.join(posteriordir, f"round_{rounds}/", f"posterior_{ensemble}.pkl")
 with open(pkl_file, "wb") as f:
     pickle.dump(posterior, f)
 
-# Draw set of thetas from the posterior for the next round of simulations
-x_obs = np.load(os.path.join(datadir, "x_obs.npy"))
-x_obs = x_obs.reshape(1, *x_obs.shape)
-proposal = posterior.set_default_x(torch.from_numpy(x_obs))
-thetas = proposal.sample((snakemake.params.n_train_sims,))
-np.save(os.path.join(datadir, f"round_{rounds}/", "thetas.npy"), thetas.cpu().numpy())
+

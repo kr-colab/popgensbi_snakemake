@@ -1,7 +1,7 @@
 rule plot_posterior:
     message: "visualizing learned posterior for round {wildcards.k}..."
     input: 
-        os.path.join(posteriordir, "round_{k}/", "posterior.pkl"),
+        os.path.join(posteriordir, "round_{k}/", "ensemble_posterior.pkl"),
         os.path.join(datadir, "x_obs.npy")
     output:
         os.path.join(posteriordir, "round_{k}/", "default_obs_samples.npy"),
