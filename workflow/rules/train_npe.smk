@@ -33,7 +33,7 @@ rule posterior_ensemble:
     resources:
         mem_mb="32000",
         slurm_partition="gpu",
-        slurm_extra="---gres=gpu:1 --constraint=gpu-10gb"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
     params:
         rounds="{k}",
         **{k: v for k, v in config.items()}
