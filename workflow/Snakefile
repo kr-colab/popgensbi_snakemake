@@ -6,7 +6,7 @@
 import os
 
 # Set up config
-configfile: "config/AraTha_2epoch.yaml"
+configfile: "config/PonAbe_split_migration.yaml"
 n_train_sims = config["n_train_sims"] # number of simulations for training NPE
 n_ensemble = config["n_ensemble"] # number of posterior per round for ensemble training
 datadir = config["datadir"] # directory for training data
