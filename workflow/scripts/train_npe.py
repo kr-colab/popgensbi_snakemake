@@ -44,15 +44,15 @@ ensemble = snakemake.params.ensemble
 
 thetas, xs = load_data_files(datadir, rounds)
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
-
 prior = simulator.prior
 
-
 if snakemake.params.embedding_net == "ExchangeableCNN":
-    if snakemake.params.ts_processor == "dinf":
-        embedding_net = ExchangeableCNN().cuda()
-    elif snakemake.params.ts_processor == "three_channel_feature_matrices":
+    if snakemake.params.ts_processor == "three_channel_feature_matrices":
         embedding_net = ExchangeableCNN(channels=3).cuda()
+    elif snakemake.params.ts_processor == "dinf_multiple_pops":
+        embedding_net = ExchangeableCNN(unmasked_x_shps=[(2, v, snakemake.params.n_snps) for v in simulator.samples.values()]).cuda()
+    else:
+        embedding_net = ExchangeableCNN().cuda()
 elif snakemake.params.embedding_net == "MLP":
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).cuda()
 elif snakemake.params.embedding_net == "CNN":
