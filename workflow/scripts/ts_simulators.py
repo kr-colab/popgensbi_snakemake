@@ -6,7 +6,7 @@ import numpy as np
 class BaseSimulator:
     def __init__(self, snakemake, params_default):
         for key, default in params_default.items():
-            if key in snakemake.params:
+            if key in snakemake.params.keys():
                 setattr(self, key, snakemake.params[key])
             else:
                 setattr(self, key, default)
@@ -215,9 +215,76 @@ class AnaPla_split_migration_simulator(BaseSimulator):
         ts = engine.simulate(model, contig, samples=self.samples)
         return ts
 
+class PonAbe_split_migration_simulator(BaseSimulator):
+    species = stdpopsim.get_species("PonAbe")
+    model = species.get_demographic_model("TwoSpecies_2L11")
+    params_default = {
+        "samples": {"Bornean":5,"Sumatran":5}, 
+        "N_A_true": model.model.events[-1].initial_size, # ancestral population size
+        "T_true": model.model.events[0].time, # split time
+        "s_true": model.populations[0].initial_size * np.exp(-model.populations[0].growth_rate * model.model.events[0].time) / model.model.events[-1].initial_size, # proportion of Na to branch B
+        "N_B_true": model.populations[0].initial_size, # current Bornean population size
+        "N_S_true": model.populations[1].initial_size, # current Sumatran population size
+        "m_B_S_true": model.model.migration_matrix[0, 1], # migration rate Bornean to Sumatran
+        "m_S_B_true": model.model.migration_matrix[1, 0], # migration rate Sumatran to Bornean
+        "N_A_low": 1e3,
+        "N_A_high": 1e6,
+        "N_B_low": 1e3,
+        "N_B_high": 1e6,
+        "N_S_low": 1e3,
+        "N_S_high": 1e6,
+        "T_low": 1e3,
+        "T_high": 1e6,
+        "m_B_S_low": 0,
+        "m_B_S_high": 1e-3,
+        "m_S_B_low": 0,
+        "m_S_B_high": 1e-3,
+        "s_low": 0.01,
+        "s_high": 0.99,
+        "contig_length": 1960000
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, PonAbe_split_migration_simulator.params_default)
+        self.true_values = {"N_A": self.N_A_true, "N_B": self.N_B_true, "N_S": self.N_S_true, "T": self.T_true, "m_B_S": self.m_B_S_true, "m_S_B": self.m_S_B_true, "s": self.s_true}
+        self.bounds = {"N_A": (self.N_A_low, self.N_A_high),
+                        "N_B": (self.N_B_low, self.N_B_high),
+                        "N_S": (self.N_S_low, self.N_S_high),
+                        "T": (self.T_low, self.T_high),
+                        "m_B_S": (self.m_B_S_low, self.m_B_S_high),
+                        "m_S_B": (self.m_S_B_low, self.m_S_B_high),
+                        "s": (self.s_low, self.s_high)
+                        }
+        low = [self.bounds[p][0] for p in self.bounds.keys()]
+        high = [self.bounds[p][1] for p in self.bounds.keys()]
+        self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
+    def __call__(self, theta):
+        if type(theta) is torch.Tensor:
+            N_A, N_B, N_S, T, m_B_S, m_S_B, s = theta.squeeze().cpu().tolist()
+        elif type(theta) is list:
+            N_A, N_B, N_S, T, m_B_S, m_S_B, s = theta
+        
+        model = PonAbe_split_migration_simulator.model
+        model.model.events[-1].initial_size = N_A
+        model.populations[0].initial_size = N_B
+        model.populations[1].initial_size = N_S
+        for i in range(len(model.model.events)):
+            model.model.events[i].time = T
+        r_B = -1 * np.log(s * N_A / N_B) / T
+        r_S = -1 * np.log((1-s) * N_A / N_S) / T
+        model.populations[0].growth_rate = r_B
+        model.populations[1].growth_rate = r_S
+        model.model.migration_matrix[0, 1] = m_B_S
+        model.model.migration_matrix[1, 0] = m_S_B
+        contig = self.species.get_contig(length=self.contig_length, mutation_rate=model.mutation_rate)
+        engine = stdpopsim.get_engine("msprime")
+        ts = engine.simulate(model, contig, samples=self.samples)
+        return ts
+
+
 MODEL_LIST = {
     "AraTha_2epoch": AraTha_2epoch_simulator,
     "HomSap_2epoch": HomSap_Africa_1b08_simulator,
     "gammaDFE_cnst_N": gammaDFE_cnst_N_simulator,
-    "AnaPla_split_migration": AnaPla_split_migration_simulator
+    "AnaPla_split_migration": AnaPla_split_migration_simulator,
+    "PonAbe_split_migration": PonAbe_split_migration_simulator
 }
