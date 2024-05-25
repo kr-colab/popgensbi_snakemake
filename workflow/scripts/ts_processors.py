@@ -5,7 +5,7 @@ import numpy as np
 class BaseProcessor:
     def __init__(self, snakemake, params_default):
         for key, default in params_default.items():
-            if key in snakemake.params:
+            if key in snakemake.params.keys():
                 setattr(self, key, snakemake.params[key])
             else:
                 setattr(self, key, default) 
@@ -46,6 +46,7 @@ class dinf_extract(BaseProcessor):
 
 class dinf_extract_multiple_pops(BaseProcessor):
     params_default = {
+        "n_snps": 500,
         "ploidy": 2,
         "phased": False,
         "maf_thresh": 0.05
@@ -76,6 +77,7 @@ class dinf_extract_multiple_pops(BaseProcessor):
         )
         # we get a dictionary of feature matrices, one for each population
         feature_matrices = extractor.from_ts(ts, individuals=individuals)
+
         # Each feature matrix has dimension of (num_individual, num_loci, 2). 
         # because num_individual can be different for each population, we need to pad them with -1
         max_num_individuals = max([num_individuals[pop] for pop in sampled_pop_names])
@@ -85,6 +87,7 @@ class dinf_extract_multiple_pops(BaseProcessor):
             num_individuals = feature_matrices[pop].shape[0]
             if num_individuals < max_num_individuals:
                 feature_matrices[pop] = torch.nn.functional.pad(feature_matrices[pop], (0, 0, 0, 0, 0, max_num_individuals - num_individuals), "constant", -1)
+
         output_mat = torch.stack([v for v in feature_matrices.values()]).permute(0, 3, 1, 2)
         return output_mat
 
