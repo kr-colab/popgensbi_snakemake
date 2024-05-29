@@ -220,38 +220,44 @@ class PonAbe_split_migration_simulator(BaseSimulator):
     model = species.get_demographic_model("TwoSpecies_2L11")
     params_default = {
         "samples": {"Bornean":5,"Sumatran":5}, 
-        "N_A_true": model.model.events[-1].initial_size, # ancestral population size
-        "T_true": model.model.events[0].time, # split time
+        "log10_N_A_true": np.log10(model.model.events[-1].initial_size), # ancestral population size
+        "log10_T_true": np.log10(model.model.events[0].time), # split time
         "s_true": model.populations[0].initial_size * np.exp(-model.populations[0].growth_rate * model.model.events[0].time) / model.model.events[-1].initial_size, # proportion of Na to branch B
-        "N_B_true": model.populations[0].initial_size, # current Bornean population size
-        "N_S_true": model.populations[1].initial_size, # current Sumatran population size
-        "m_B_S_true": model.model.migration_matrix[0, 1], # migration rate Bornean to Sumatran
-        "m_S_B_true": model.model.migration_matrix[1, 0], # migration rate Sumatran to Bornean
-        "N_A_low": 1e3,
-        "N_A_high": 1e6,
-        "N_B_low": 1e3,
-        "N_B_high": 1e6,
-        "N_S_low": 1e3,
-        "N_S_high": 1e6,
-        "T_low": 1e3,
-        "T_high": 1e6,
-        "m_B_S_low": 0,
-        "m_B_S_high": 1e-3,
-        "m_S_B_low": 0,
-        "m_S_B_high": 1e-3,
+        "log10_N_B_true": np.log10(model.populations[0].initial_size), # current Bornean population size
+        "log10_N_S_true": np.log10(model.populations[1].initial_size), # current Sumatran population size
+        "log10_m_B_S_true": np.log10(model.model.migration_matrix[0, 1]), # migration rate Bornean to Sumatran
+        "log10_m_S_B_true": np.log10(model.model.migration_matrix[1, 0]), # migration rate Sumatran to Bornean
+        "log10_N_A_low": 3,
+        "log10_N_A_high": 6,
+        "log10_N_B_low": 3,
+        "log10_N_B_high": 6,
+        "log10_N_S_low": 3,
+        "log10_N_S_high": 6,
+        "log10_T_low": 3,
+        "log10_T_high": 6,
+        "log10_m_B_S_low": -9,
+        "log10_m_B_S_high": -3,
+        "log10_m_S_B_low": -9,
+        "log10_m_S_B_high": -3,
         "s_low": 0.01,
         "s_high": 0.99,
         "contig_length": 1960000
     }
     def __init__(self, snakemake):
         super().__init__(snakemake, PonAbe_split_migration_simulator.params_default)
-        self.true_values = {"N_A": self.N_A_true, "N_B": self.N_B_true, "N_S": self.N_S_true, "T": self.T_true, "m_B_S": self.m_B_S_true, "m_S_B": self.m_S_B_true, "s": self.s_true}
-        self.bounds = {"N_A": (self.N_A_low, self.N_A_high),
-                        "N_B": (self.N_B_low, self.N_B_high),
-                        "N_S": (self.N_S_low, self.N_S_high),
-                        "T": (self.T_low, self.T_high),
-                        "m_B_S": (self.m_B_S_low, self.m_B_S_high),
-                        "m_S_B": (self.m_S_B_low, self.m_S_B_high),
+        self.true_values = {"log10_N_A": self.log10_N_A_true, 
+            "log10_N_B": self.log10_N_B_true, 
+            "log10_N_S": self.log10_N_S_true, 
+            "log10_T": self.log10_T_true, 
+            "log10_m_B_S": self.log10_m_B_S_true, 
+            "log10_m_S_B": self.log10_m_S_B_true, 
+            "s": self.s_true}
+        self.bounds = {"log10_N_A": (self.log10_N_A_low, self.log10_N_A_high),
+                        "log10_N_B": (self.log10_N_B_low, self.log10_N_B_high),
+                        "log10_N_S": (self.log10_N_S_low, self.log10_N_S_high),
+                        "log10_T": (self.log10_T_low, self.log10_T_high),
+                        "log10_m_B_S": (self.log10_m_B_S_low, self.log10_m_B_S_high),
+                        "log10_m_S_B": (self.log10_m_S_B_low, self.log10_m_S_B_high),
                         "s": (self.s_low, self.s_high)
                         }
         low = [self.bounds[p][0] for p in self.bounds.keys()]
@@ -259,10 +265,16 @@ class PonAbe_split_migration_simulator(BaseSimulator):
         self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
     def __call__(self, theta):
         if type(theta) is torch.Tensor:
-            N_A, N_B, N_S, T, m_B_S, m_S_B, s = theta.squeeze().cpu().tolist()
+            log10_N_A, log10_N_B, log10_N_S, log10_T, log10_m_B_S, log10_m_S_B, s = theta.squeeze().cpu().tolist()
         elif type(theta) is list:
-            N_A, N_B, N_S, T, m_B_S, m_S_B, s = theta
-        
+            log10_N_A, log10_N_B, log10_N_S, log10_T, log10_m_B_S, log10_m_S_B, s = theta
+        N_A = 10 ** log10_N_A
+        N_B = 10 ** log10_N_B
+        N_S = 10 ** log10_N_S
+        T = 10 ** log10_T
+        m_B_S = 10 ** log10_m_B_S
+        m_S_B = 10 ** log10_m_S_B
+
         model = PonAbe_split_migration_simulator.model
         model.model.events[-1].initial_size = N_A
         model.populations[0].initial_size = N_B
