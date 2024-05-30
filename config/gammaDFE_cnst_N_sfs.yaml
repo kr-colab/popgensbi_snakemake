@@ -7,3 +7,4 @@ n_snps: 2000 # number of SNPs to use (for dinf)
 embedding_net: "MLP"
 total_rounds: 3 # number of rounds
 N: 100 # population size
+n_ensemble: 5 # number of ensemble members
