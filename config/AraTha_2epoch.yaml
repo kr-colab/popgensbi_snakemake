@@ -6,3 +6,4 @@ ts_processor: "dinf"
 n_snps: 2000 # number of SNPs to use (for dinf)
 embedding_net: "ExchangeableCNN"
 total_rounds: 5 # number of rounds
+n_ensemble: 5 # number of ensemble members

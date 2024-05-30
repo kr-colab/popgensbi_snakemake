@@ -5,7 +5,7 @@ import numpy as np
 class BaseProcessor:
     def __init__(self, snakemake, params_default):
         for key, default in params_default.items():
-            if key in snakemake.params:
+            if key in snakemake.params.keys():
                 setattr(self, key, snakemake.params[key])
             else:
                 setattr(self, key, default) 
@@ -43,6 +43,54 @@ class dinf_extract(BaseProcessor):
         )
         feature_matrix = extractor.from_ts(ts)
         return torch.from_numpy(feature_matrix).float().permute(2, 0, 1)
+
+class dinf_extract_multiple_pops(BaseProcessor):
+    params_default = {
+        "n_snps": 500,
+        "ploidy": 2,
+        "phased": False,
+        "maf_thresh": 0.05
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, dinf_extract.params_default)
+
+    def __call__(self, ts):        
+        '''
+        input : tree sequence of one population
+        output : genotype matrix + positional encoding (dinf's format)
+        '''
+        from dinf.misc import ts_individuals
+        # recover population names and corresponding sampled individuals
+        pop_names = [pop.metadata['name'] for pop in ts.populations()]
+        # make a dictionary with sampled individuals for each population except for unsampled ones
+        sampled_pop_names = [pop for pop in pop_names if len(ts_individuals(ts, pop)) > 0]
+        individuals = {name: ts_individuals(ts, name) for name in sampled_pop_names}
+        num_individuals = {name: len(individuals[name]) for name in sampled_pop_names}
+
+            
+        extractor = dinf.feature_extractor.MultipleHaplotypeMatrices(
+            num_individuals=num_individuals, 
+            num_loci={pop: self.n_snps for pop in sampled_pop_names},
+            ploidy={pop: self.ploidy for pop in sampled_pop_names},
+            global_phased=self.phased,
+            global_maf_thresh=self.maf_thresh
+        )
+        # we get a dictionary of feature matrices, one for each population
+        feature_matrices = extractor.from_ts(ts, individuals=individuals)
+
+        # Each feature matrix has dimension of (num_individual, num_loci, 2). 
+        # because num_individual can be different for each population, we need to pad them with -1
+        max_num_individuals = max([num_individuals[pop] for pop in sampled_pop_names])
+
+        for pop in individuals.keys():
+            feature_matrices[pop] = torch.from_numpy(feature_matrices[pop])
+            num_individuals = feature_matrices[pop].shape[0]
+            if num_individuals < max_num_individuals:
+                feature_matrices[pop] = torch.nn.functional.pad(feature_matrices[pop], (0, 0, 0, 0, 0, max_num_individuals - num_individuals), "constant", -1)
+
+        output_mat = torch.stack([v for v in feature_matrices.values()]).permute(0, 3, 1, 2)
+        return output_mat
+
 
 class three_channel_feature_matrices(BaseProcessor):
     params_default = {
@@ -131,6 +179,30 @@ class tskit_sfs(BaseProcessor):
             polarised = self.polarised)
         return torch.from_numpy(sfs).float()
 
+class tskit_jsfs(BaseProcessor):
+    '''
+    Joint site frequency spectrum for two-population model
+    '''
+    params_default = {
+        "windows": None,
+        "mode": "site",
+        "span_normalise": True,
+        "polarised": False
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, tskit_sfs.params_default)
+    def __call__(self, ts):
+        sfs = ts.allele_frequency_spectrum(
+            sample_sets = [ts.samples(population=0), ts.samples(population=1)], 
+            windows = self.windows, 
+            mode = self.mode, 
+            span_normalise = self.span_normalise, 
+            polarised = self.polarised)
+        return torch.from_numpy(sfs).float()
+
+
+
+
 class tskit_sfs_selection(BaseProcessor):
     ## get SFS with synnonymous and non-synonymous mutations separately and append the two arrays to get a single array
     params_default = {
@@ -146,12 +218,12 @@ class tskit_sfs_selection(BaseProcessor):
             count = sum(var.genotypes)
             # If there are multiple mutations at a site, the last mutation is considered
             if var.site.mutations[-1].metadata['mutation_list'][-1]['mutation_type']==2:
-                if self.polairised:
+                if self.polarised:
                     nonsyn_counts.append(min(count, ts.num_samples - count))
                 else:
                     nonsyn_counts.append(count)
             else:
-                if self.polairised:
+                if self.polarised:
                     syn_counts.append(min(count, ts.num_samples - count))
                 else:
                     syn_counts.append(count)
@@ -169,7 +241,9 @@ class tskit_sfs_selection(BaseProcessor):
 
 PROCESSOR_LIST = {
     "dinf": dinf_extract,
+    "dinf_multiple_pops": dinf_extract_multiple_pops,
     "three_channel_feature_matrices": three_channel_feature_matrices,
     "tskit_sfs": tskit_sfs,
+    "tskit_jsfs": tskit_jsfs,
     "tskit_sfs_selection": tskit_sfs_selection
 }

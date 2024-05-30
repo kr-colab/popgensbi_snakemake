@@ -1,0 +1,8 @@
+n_train_sims: 5 # number of simulations per rounds
+datadir: "results/AnaPla_split_migration_jsfs/data/"
+posteriordir: "results/AnaPla_split_migration_jsfs/posterior/"
+demog_model: "AnaPla_split_migration"
+ts_processor: "tskit_jsfs"
+embedding_net: "CNN"
+total_rounds: 2 # number of rounds
+n_ensemble: 3 # number of ensemble members

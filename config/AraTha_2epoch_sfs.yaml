@@ -5,3 +5,4 @@ demog_model: "AraTha_2epoch"
 ts_processor: "tskit_sfs"
 embedding_net: "MLP"
 total_rounds: 5 # number of rounds
+n_ensemble: 5

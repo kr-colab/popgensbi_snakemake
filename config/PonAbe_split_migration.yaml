@@ -1,0 +1,10 @@
+n_train_sims: 5000 # number of simulations per rounds
+datadir: "results/PonAbe_split_migration/data/"
+posteriordir: "results/PonAbe_split_migration/posterior/"
+demog_model: "PonAbe_split_migration"
+ts_processor: "dinf_multiple_pops"
+n_snps: 2000 # number of SNPs to use (for dinf)
+embedding_net: "ExchangeableCNN"
+total_rounds: 5 # number of rounds
+n_ensemble: 5 # number of ensemble members
+samples: {"Bornean":5,"Sumatran":5}
