@@ -11,6 +11,7 @@ from sbi.inference import SNPE
 from sbi.inference.posteriors import DirectPosterior
 from sbi.utils import posterior_nn
 from natsort import natsorted
+from torch.utils.tensorboard import SummaryWriter
 
 def load_data_files(data_dir, rounds):
     """
@@ -42,6 +43,9 @@ posteriordir = snakemake.params.posteriordir
 rounds = snakemake.params.rounds
 ensemble = snakemake.params.ensemble
 
+if not os.path.isdir(os.path.join(posteriordir, f"round_{rounds}")):
+    os.mkdir(os.path.join(posteriordir, f"round_{rounds}"))
+
 thetas, xs = load_data_files(datadir, rounds)
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 prior = simulator.prior
@@ -65,25 +69,29 @@ normalizing_flow_density_estimator = posterior_nn(
     hidden_features=64,
     num_transforms=6,
 )
+# get the log directory for tensorboard summary writer
+log_dir = os.path.join(posteriordir, f"round_{rounds}", "sbi_logs", f"rep_{ensemble}")
+writer = SummaryWriter(log_dir=log_dir)
 inference = SNPE(
     prior=prior,
     density_estimator=normalizing_flow_density_estimator,
     device="cuda",
     show_progress_bars=True,
+    summary_writer=writer,
 )
 posterior_estimator = inference.append_simulations(thetas, xs).train(
     show_train_summary=True,
     retrain_from_scratch=True,
     validation_fraction=0.2,
 )
+
+writer.close()
 posterior = DirectPosterior(
     posterior_estimator=posterior_estimator, 
     prior=prior, 
     device="cuda")
 
 
-if not os.path.isdir(os.path.join(posteriordir, f"round_{rounds}")):
-    os.mkdir(os.path.join(posteriordir, f"round_{rounds}"))
 pkl_file = os.path.join(posteriordir, f"round_{rounds}/", f"posterior_{ensemble}.pkl")
 with open(pkl_file, "wb") as f:
     pickle.dump(posterior, f)

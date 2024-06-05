@@ -16,3 +16,15 @@ rule plot_posterior:
         **{k: v for k, v in config.items()}
     # scripts is outside rules
     script: "../scripts/plotting.py"
+
+rule plot_ci:
+    input:
+        lambda wildcards: os.path.join(posteriordir, "round_{}/confidence_intervals.npy".format(int(wildcards.k) -1)) if int(wildcards.k) >= 1 else [],
+        os.path.join(posteriordir, "round_{k}/", "default_obs_samples.npy")
+    output:
+        os.path.join(posteriordir, "round_{k}/", "confidence_intervals.npy"),
+        os.path.join(posteriordir, "round_{k}/", "confidence_intervals.png")
+    params:
+        rounds=lambda wildcards: wildcards.k,
+        **{k: v for k, v in config.items()}
+    script: "../scripts/plot_confidence_intervals.py"
