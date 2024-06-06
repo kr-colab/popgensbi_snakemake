@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from ts_simulators import *
+from dadi_simulators import *
 
 # track confidence interval of each parameter at each round and plot it againts number of rounds
 datadir = snakemake.params.datadir
