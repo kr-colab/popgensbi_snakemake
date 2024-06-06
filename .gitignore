@@ -8,3 +8,4 @@ workflow/results/**
 workflow/sbi-logs/**
 sbi-logs/**
 workflow/notebooks/**
+workflow_dadi/scripts/__pycache__/**
