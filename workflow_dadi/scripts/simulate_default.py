@@ -12,6 +12,6 @@ if not os.path.isdir(f"{datadir}/"):
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 
 theta_star = simulator.true_values
-theta_star = torch.tensor(list(theta_star))
+theta_star = torch.tensor(list(theta_star.values()))
 fs_star = simulator(theta_star)
 np.save(os.path.join(datadir, "fs_star.npy"), fs_star)
