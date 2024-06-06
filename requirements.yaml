@@ -17,5 +17,4 @@ dependencies:
     - sbi
     - dinf
     - snakemake-executor-plugin-slurm
-    - corner
     - natsort
