@@ -1,7 +1,6 @@
 import os
 import pickle
 
-import corner
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
