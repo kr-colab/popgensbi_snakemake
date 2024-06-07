@@ -15,6 +15,7 @@ rule all:
         expand(os.path.join(datadir, "sim_round_{k}/", "fs_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
         expand(os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior.pkl"), k=list(range(n_rounds))),
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator.pkl"), k=list(range(n_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "inference.pkl"), k=list(range(n_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy"), k=list(range(n_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "default_obs_corner.png"), k=list(range(n_rounds))),
@@ -59,6 +60,7 @@ rule train_npe:
         lambda wildcards: expand(os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"), i=range(n_sims_per_round), k=[wildcards.k])
     output:
         os.path.join(posteriordir, "sim_round_{k}/", "posterior.pkl"),
+        os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator.pkl"),
         os.path.join(posteriordir, "sim_round_{k}/", "inference.pkl")
     log:
         "logs/train_npe_round_{k}.log"
