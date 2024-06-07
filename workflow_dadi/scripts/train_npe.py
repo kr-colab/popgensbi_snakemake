@@ -79,5 +79,8 @@ posterior = DirectPosterior(posterior_estimator=posterior_estimator, prior=prior
 
 with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", "inference.pkl"), "wb") as f:
     pickle.dump(inference, f)
+# save posterior estimator (this contains trained normalizing flow - can be used for fine-turning?)
+with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", "posterior_estimator.pkl"), "wb") as f:
+    pickle.dump(posterior_estimator, f)
 with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", "posterior.pkl"), "wb") as f:
     pickle.dump(posterior, f)
