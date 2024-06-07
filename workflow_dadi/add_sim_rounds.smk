@@ -6,7 +6,7 @@ import os
 configfile: "config/PonAbe_IM.yaml"
 
 n_sims_per_round = config["n_sims_per_round"] # number of simulations per round
-n_rounds = config["n_rounds"] # number of rounds
+n_rounds = config["n_rounds"] # number of rounds set by config. If the maximum number of rounds run so far is larger, replace it with that number.
 datadir = config["datadir"] # directory for training data
 posteriordir = config["posteriordir"] # output directory for posterior
 n_extra_rounds = 5
