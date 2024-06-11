@@ -10,6 +10,7 @@ dependencies:
   - torchaudio
   - pytorch-cuda=11.8
   - stdpopsim
+  - dadi
   - defopt
   - snakemake
   - pip
