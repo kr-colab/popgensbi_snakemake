@@ -22,8 +22,9 @@ rule all:
         expand(os.path.join(posteriordir, "sim_round_{k}/", "default_obs_corner.png"), k=list(range(n_rounds, n_rounds+n_extra_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "confidence_intervals.png"), k=list(range(n_rounds, n_rounds+n_extra_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "confidence_intervals.npy"), k=list(range(n_rounds, n_rounds+n_extra_rounds))), 
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "sample_fs/fs_sample_{idx}.npy"), k=list(range(n_rounds, n_rounds+n_extra_rounds)), idx=range(1000)),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "2d_comp_multinom.png"), k=list(range(n_rounds, n_rounds+n_extra_rounds)))
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "2d_comp_multinom.png"), k=list(range(n_rounds, n_rounds+n_extra_rounds))),
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "map_thetas.npy"), k=list(range(n_rounds, n_rounds+n_extra_rounds))),
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "model_fs.npy"), k=list(range(n_rounds, n_rounds+n_extra_rounds)))
 
 rule simulate_ts:
     message:
@@ -68,10 +69,13 @@ rule plot_posterior:
     message: "visualizing learned posterior for round {wildcards.k}..."
     input: 
         os.path.join(posteriordir, "sim_round_{k}/", "posterior.pkl"),
-        os.path.join(datadir, "fs_star.npy")
+        os.path.join(datadir, "fs_star.npy"),
     output:
         os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy"),
-        os.path.join(posteriordir, "sim_round_{k}/", "default_obs_corner.png")
+        os.path.join(posteriordir, "sim_round_{k}/", "default_obs_corner.png"),
+        os.path.join(posteriordir, "sim_round_{k}/model_fs.npy"),
+        os.path.join(posteriordir, "sim_round_{k}/map_thetas.npy")
+
     log: "logs/plot_posterior_round_{k}.log"
     resources:
         mem_mb="5000",
@@ -95,25 +99,13 @@ rule plot_ci:
         **{k: v for k, v in config.items()}
     script: "scripts/plot_confidence_intervals.py"
 
-rule simulate_from_posterior:
-    message: "simulate fs from posterior sample in round {wildcards.k}..."
-    input:
-        os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy")
-    output:
-        os.path.join(posteriordir, "sim_round_{k}/", "sample_fs/fs_sample_{idx}.npy")
-    params:
-        sim_rounds=lambda wildcards: wildcards.k,
-        sample_idx=lambda wildcards: wildcards.idx,
-        **{k: v for k, v in config.items()}
-    script: "scripts/simulate_from_posterior.py"
-
 rule plot_2d_comp_multinom:
-    message: "compare default fs againts avg fs from posterior samples"
+    message: "compare default fs to simulated fs from MAP parameters"
     input:
-        lambda wildcards: expand(os.path.join(posteriordir, "sim_round_{k}/", "sample_fs/fs_sample_{idx}.npy"), idx=range(1000), k=[wildcards.k]),
+        os.path.join(posteriordir, "sim_round_{k}/model_fs.npy"),
         os.path.join(datadir, "fs_star.npy")
     output:
-        os.path.join(posteriordir, "sim_round_{k}/2d_comp_multinom.png")
+        os.path.join(posteriordir, "sim_round_{k}/2d_comp_multinom.png"), 
     params:
         sim_rounds=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}
