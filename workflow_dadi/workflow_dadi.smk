@@ -6,6 +6,7 @@ configfile: "config/PonAbe_IM_sample.yaml"
 
 n_sims_per_round = config["n_sims_per_round"] # number of simulations per round
 n_rounds = config["n_rounds"] # number of rounds
+n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
 datadir = config["datadir"] # directory for training data
 posteriordir = config["posteriordir"] # output directory for posterior
 
@@ -14,9 +15,10 @@ rule all:
         os.path.join(datadir, "fs_star.npy"),
         expand(os.path.join(datadir, "sim_round_{k}/", "fs_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
         expand(os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior.pkl"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator.pkl"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "inference.pkl"), k=list(range(n_rounds))),
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "inference_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
+        expand(os.path.join(posteriordir, "sim_round_{k}/", "ensemble_posterior.pkl"), k=list(range(n_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy"), k=list(range(n_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "default_obs_corner.png"), k=list(range(n_rounds))),
         expand(os.path.join(posteriordir, "sim_round_{k}/", "confidence_intervals.png"), k=list(range(n_rounds))),
@@ -38,7 +40,7 @@ rule simulate_default:
     script:
         "scripts/simulate_default.py"
 
-rule simulate_ts:
+rule simulate:
     message:
         "simulating sfs for round {wildcards.k}..."
     output:
@@ -56,17 +58,35 @@ rule simulate_ts:
 
 rule train_npe:
     message:
-        "training neural posterior estimators for round {wildcards.k}..."
+        "training neural posterior estimators for round {wildcards.k} rep {wildcards.e}..."
     input:
-        lambda wildcards: os.path.join(posteriordir, "sim_round_{}/inference.pkl".format(int(wildcards.k) -1)) if int(wildcards.k) >= 1 else [],
         lambda wildcards: expand(os.path.join(datadir, "sim_round_{k}/", "fs_{i}.npy"), i=range(n_sims_per_round), k=[wildcards.k]),
         lambda wildcards: expand(os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"), i=range(n_sims_per_round), k=[wildcards.k])
     output:
-        os.path.join(posteriordir, "sim_round_{k}/", "posterior.pkl"),
-        os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator.pkl"),
-        os.path.join(posteriordir, "sim_round_{k}/", "inference.pkl")
+        os.path.join(posteriordir, "sim_round_{k}/", "posterior_rep_{e}.pkl"),
+        os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator_rep_{e}.pkl"),
+        os.path.join(posteriordir, "sim_round_{k}/", "inference_rep_{e}.pkl")
     log:
-        "logs/train_npe_round_{k}.log"
+        "logs/train_npe_round_{k}_rep_{e}.log"
+    resources:
+        mem_mb="20000",
+        slurm_partition="gpu",
+        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+    params:
+        sim_rounds="{k}",
+        ensemble="{e}",
+        **{k: v for k, v in config.items()}
+    script: "scripts/train_npe.py"
+
+rule posterior_ensemble:
+    message:
+        "creating an ensemble posterior for round {wildcards.k}"
+    input:
+        lambda wildcards: expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_rep_{e}.pkl"), e=range(n_ensemble), k=[wildcards.k])
+    output:
+        os.path.join(posteriordir, "sim_round_{k}/", "ensemble_posterior.pkl")
+    log:
+        "logs/posterior_ensemble_round_{k}.log"
     resources:
         mem_mb="32000",
         slurm_partition="gpu",
@@ -74,13 +94,12 @@ rule train_npe:
     params:
         sim_rounds="{k}",
         **{k: v for k, v in config.items()}
-    script: "scripts/train_npe.py"
-
-
+    script: "scripts/posterior_ensemble.py"
+    
 rule plot_posterior:
     message: "visualizing learned posterior for round {wildcards.k}..."
     input: 
-        os.path.join(posteriordir, "sim_round_{k}/", "posterior.pkl"),
+        os.path.join(posteriordir, "sim_round_{k}/", "ensemble_posterior.pkl"),
         os.path.join(datadir, "fs_star.npy"),
     output:
         os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy"),

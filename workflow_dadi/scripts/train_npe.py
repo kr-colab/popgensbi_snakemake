@@ -29,6 +29,7 @@ def load_data_files(data_dir, sim_rounds):
 datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
 sim_rounds = snakemake.params.sim_rounds
+ensemble = snakemake.params.ensemble
 
 if not os.path.isdir(posteriordir):
     os.mkdir(posteriordir)
@@ -57,10 +58,11 @@ embedding_net = CNNEmbedding(
 
 normalizing_flow_density_estimator = posterior_nn(
     model="maf",
-    embedding_net=embedding_net
+    embedding_net=embedding_net,
+    hidden_features=60,
 )
 
-log_dir = os.path.join(posteriordir, "sbi_logs", f"sim_round_{sim_rounds}")
+log_dir = os.path.join(posteriordir, "sbi_logs", f"sim_round_{sim_rounds}", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
 # if int(sim_rounds) == 0:
 #     inference = SNPE(
@@ -93,10 +95,10 @@ posterior_estimator = inference.train(show_train_summary=True,
 writer.close()
 posterior = DirectPosterior(posterior_estimator=posterior_estimator, prior=prior, device="cuda")
 
-with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", "inference.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(inference, f)
 # save posterior estimator (this contains trained normalizing flow - can be used for fine-turning?)
-with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", "posterior_estimator.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", f"posterior_estimator_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior_estimator, f)
-with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", "posterior.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", f"posterior_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior, f)
