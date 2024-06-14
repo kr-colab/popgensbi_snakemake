@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/PonAbe_IM.yaml"
+configfile: "config/PonAbe_IM_sample.yaml"
 
 n_sims_per_round = config["n_sims_per_round"] # number of simulations per round
 n_rounds = config["n_rounds"] # number of rounds
@@ -40,7 +40,7 @@ rule simulate_default:
 
 rule simulate_ts:
     message:
-        "simulating tree sequences for round {wildcards.k}..."
+        "simulating sfs for round {wildcards.k}..."
     output:
         os.path.join(datadir, "sim_round_{k}/", "fs_{i}.npy"),
         os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"),
@@ -113,7 +113,7 @@ rule plot_ci:
 
 
 rule plot_2d_comp_multinom:
-    message: "compare default fs to simulated fs from MAP parameters"
+    message: "compare default fs to simulated fs from MAP parameters for round {wildcards.k}..."
     input:
         os.path.join(posteriordir, "sim_round_{k}/model_fs.npy"),
         os.path.join(datadir, "fs_star.npy")
