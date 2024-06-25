@@ -1,0 +1,8 @@
+datadir: "results/PonAbe_IM_msprime/data/"
+posteriordir: "results/PonAbe_IM_msprime/posterior/"
+demog_model: "PonAbe_IM_msprime"
+ts_processor: "tskit_jsfs"
+embedding_net: "CNN"
+n_sims_per_round : 1000
+n_rounds : 50
+n_ensemble: 10 # number of ensemble members

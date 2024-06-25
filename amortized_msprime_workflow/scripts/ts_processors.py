@@ -161,11 +161,14 @@ class three_channel_feature_matrices(BaseProcessor):
 
 
 class tskit_sfs(BaseProcessor):
+    '''
+    Normalized sfs (sum to 1)
+    '''
     params_default = {
         "sample_sets": None,
         "windows": None,
         "mode": "site",
-        "span_normalise": True,
+        "span_normalise": False,
         "polarised": False
     }
     def __init__(self, snakemake):
@@ -177,16 +180,18 @@ class tskit_sfs(BaseProcessor):
             mode = self.mode, 
             span_normalise = self.span_normalise, 
             polarised = self.polarised)
+        sfs = sfs / sum(sfs)
         return torch.from_numpy(sfs).float()
 
 class tskit_jsfs(BaseProcessor):
     '''
     Joint site frequency spectrum for two-population model
+    Normalized sfs (sum to 1)
     '''
     params_default = {
         "windows": None,
         "mode": "site",
-        "span_normalise": True,
+        "span_normalise": False,
         "polarised": False
     }
     def __init__(self, snakemake):
@@ -198,6 +203,7 @@ class tskit_jsfs(BaseProcessor):
             mode = self.mode, 
             span_normalise = self.span_normalise, 
             polarised = self.polarised)
+        sfs = sfs / sum(sum(sfs))
         return torch.from_numpy(sfs).float()
 
 
@@ -239,11 +245,82 @@ class tskit_sfs_selection(BaseProcessor):
         sfs_combined = np.append(nonsyn_sfs, syn_sfs)
         return torch.from_numpy(sfs_combined).float()
 
+
+class moments_LD_stats(BaseProcessor):
+    '''
+    create a matrix of recombination bin edges, LD statistics from moments from ts
+    '''
+    params_default = {
+        "n_bins": 10,
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, moments_LD_stats.params_default)
+    def __call__(self, ts):
+        import moments
+        import gzip
+        import os 
+        datadir = snakemake.params.datadir
+        rounds = snakemake.params.rounds
+        num_simulations = snakemake.params.num_simulations
+        vcf_name = f"{datadir}/round_{rounds}/{num_simulations}.vcf"
+        with open(vcf_name, "w+") as fout:
+            ts.write_vcf(fout)
+        os.system(f"gzip {vcf_name}")
+        vcf_file = f"{vcf_name}.gz"
+        map_file = f"{datadir}/round_{rounds}/{num_simulations}.map.txt"
+        Map_cm = ts.sequence_length * contig.recombination_map.rate[0] * 100
+        with open(map_file, "w+") as fout:
+            fout.write("pos\tMap(cM)\n")
+            fout.write("0\t0\n")
+            fout.write(f"{int(ts.sequence_length)}\t{Map_cm}\n")
+        r_bins = np.logspace(round(np.log10(contig.recombination_map.rate[0]))+1, 
+                        round(np.log10(contig.recombination_map.rate[0] * contig.length))-1,
+                        self.n_bins)
+        if ts.num_populations > 1:
+            pops_rep = []
+            for n in range(ts.num_populations):
+                for i in range(int(len(ts.samples(n))/2)):
+                    pops_rep.append(ts.population(n).metadata['name'])
+            pop_file = f"{datadir}/round_{rounds}/{num_simulations}.map.txt"                    
+            with open(pop_file, "w+") as fout:
+                fout.write("sample\tpop\n")
+                for j, pop in enumerate(pops_rep):
+                    fout.write(f"tsk_{j}\t{pop}\n")
+            pops = [ts.population(n).metadata['name'] for n in range(ts.num_populations)]
+            ld_stats = moments.LD.Parsing.comput_ld_statistics(
+                vcf_file,
+                rec_map_file = map_file,
+                pop_file = pop_file,
+                pops=pops,
+                r_bins=r_bins,
+                report=False
+            )
+        else:
+            ld_stats = moments.LD.Parsing.compute_ld_statistics(
+                vcf_file,
+                rec_map_file = map_file,
+                r_bins=r_bins,
+                report=False
+            )
+        
+        means = moments.LD.Parsing.means_from_region_data({0:ld_stats}, ld_stats['stats'], norm_idx=0)
+        ld_stats_mat = np.zeros((len(means[0])+len(means[-1])+1, len(means)-1))
+        # first row is edges of recombination bins
+        ld_stats_mat[0] = 0.5 * (r_bins[1:] + r_bins[:-1])
+        # next rows are LD statistics
+        for i in range(len(means[0])):
+            ld_stats_mat[i+1] = [means[j][i] for j in range(len(means)-1)]
+        # final rows are copies of H
+        for i in range(len(means[-1])):
+            ld_stats_mat[-i-1] = np.ones(len(means)-1) * means[-1][-i-1]
+        return torch.from_numpy(ld_stats_mat).float()
+
 PROCESSOR_LIST = {
     "dinf": dinf_extract,
     "dinf_multiple_pops": dinf_extract_multiple_pops,
     "three_channel_feature_matrices": three_channel_feature_matrices,
     "tskit_sfs": tskit_sfs,
     "tskit_jsfs": tskit_jsfs,
-    "tskit_sfs_selection": tskit_sfs_selection
+    "tskit_sfs_selection": tskit_sfs_selection, 
+    "moments_LD_stats": moments_LD_stats
 }

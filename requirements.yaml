@@ -10,6 +10,7 @@ dependencies:
   - torchaudio
   - pytorch-cuda=11.8
   - stdpopsim
+  - dadi
   - defopt
   - snakemake
   - pip
@@ -17,5 +18,4 @@ dependencies:
     - sbi
     - dinf
     - snakemake-executor-plugin-slurm
-    - corner
     - natsort

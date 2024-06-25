@@ -215,78 +215,84 @@ class AnaPla_split_migration_simulator(BaseSimulator):
         ts = engine.simulate(model, contig, samples=self.samples)
         return ts
 
-class PonAbe_split_migration_simulator(BaseSimulator):
+class PonAbe_IM_msprime_simulator(BaseSimulator):
+    '''
+    simulate split and migration moel of Orangutan
+    edited to match dadi simulator (PonAbe_IM_sample and PonAb_IM)
+    '''
     species = stdpopsim.get_species("PonAbe")
     model = species.get_demographic_model("TwoSpecies_2L11")
     params_default = {
-        "samples": {"Bornean":5,"Sumatran":5}, 
-        "log10_N_A_true": np.log10(model.model.events[-1].initial_size), # ancestral population size
-        "log10_T_true": np.log10(model.model.events[0].time), # split time
-        "s_true": model.populations[0].initial_size * np.exp(-model.populations[0].growth_rate * model.model.events[0].time) / model.model.events[-1].initial_size, # proportion of Na to branch B
-        "log10_N_B_true": np.log10(model.populations[0].initial_size), # current Bornean population size
-        "log10_N_S_true": np.log10(model.populations[1].initial_size), # current Sumatran population size
-        "log10_m_B_S_true": np.log10(model.model.migration_matrix[0, 1]), # migration rate Bornean to Sumatran
-        "log10_m_S_B_true": np.log10(model.model.migration_matrix[1, 0]), # migration rate Sumatran to Bornean
-        "log10_N_A_low": 3,
-        "log10_N_A_high": 6,
-        "log10_N_B_low": 3,
-        "log10_N_B_high": 6,
-        "log10_N_S_low": 3,
-        "log10_N_S_high": 6,
-        "log10_T_low": 3,
-        "log10_T_high": 6,
-        "log10_m_B_S_low": -9,
-        "log10_m_B_S_high": -3,
-        "log10_m_S_B_low": -9,
-        "log10_m_S_B_high": -3,
-        "s_low": 0.01,
-        "s_high": 0.99,
-        "contig_length": 1960000
+        "samples": {"Bornean":50,"Sumatran":50}, 
+        # choose contig length so that 4 N_anc mu L = 1e4
+        "contig_length": int(1e4 / (4 * model.mutation_rate * model.model.events[-1].initial_size)),
+        # ratio of population split = s : 1-s
+        "s_true": (model.populations[0].initial_size 
+                * np.exp(-model.populations[0].growth_rate 
+                    * model.model.events[0].time) 
+                    / model.model.events[-1].initial_size),
+        # size of population 1 relative to ancestral population
+        "nu1_true": (model.populations[0].initial_size 
+            / model.model.events[-1].initial_size),
+        # size of population 2 relative to ancestral population
+        "nu2_true": (model.populations[1].initial_size
+            / model.model.events[-1].initial_size),
+        # time of population split scaled by 2 * ancestral population size
+        "T_true": (model.model.events[0].time 
+            / (2 * model.model.events[-1].initial_size)),
+        # migration rate from population 1 to population 2 * 2 * ancestral population size
+        "m12_true": (model.model.migration_matrix[0, 1] 
+            * 2 * model.model.events[-1].initial_size),
+        # migration rate from population 2 to population 1 * 2 * ancestral population size
+        "m21_true": (model.model.migration_matrix[1, 0]
+            * 2 * model.model.events[-1].initial_size),
+        "s_low": 0.05,
+        "s_high": 0.95,
+        "nu1_low": 0.01,
+        "nu1_high": 5,
+        "nu2_low": 0.01,
+        "nu2_high": 5,
+        "T_low": 0.01,
+        "T_high": 5,
+        "m12_low": 0.0,
+        "m12_high": 2,
+        "m21_low": 0.0,
+        "m21_high": 2
     }
     def __init__(self, snakemake):
-        super().__init__(snakemake, PonAbe_split_migration_simulator.params_default)
-        self.true_values = {"log10_N_A": self.log10_N_A_true, 
-            "log10_N_B": self.log10_N_B_true, 
-            "log10_N_S": self.log10_N_S_true, 
-            "log10_T": self.log10_T_true, 
-            "log10_m_B_S": self.log10_m_B_S_true, 
-            "log10_m_S_B": self.log10_m_S_B_true, 
-            "s": self.s_true}
-        self.bounds = {"log10_N_A": (self.log10_N_A_low, self.log10_N_A_high),
-                        "log10_N_B": (self.log10_N_B_low, self.log10_N_B_high),
-                        "log10_N_S": (self.log10_N_S_low, self.log10_N_S_high),
-                        "log10_T": (self.log10_T_low, self.log10_T_high),
-                        "log10_m_B_S": (self.log10_m_B_S_low, self.log10_m_B_S_high),
-                        "log10_m_S_B": (self.log10_m_S_B_low, self.log10_m_S_B_high),
-                        "s": (self.s_low, self.s_high)
-                        }
-        low = [self.bounds[p][0] for p in self.bounds.keys()]
-        high = [self.bounds[p][1] for p in self.bounds.keys()]
+        super().__init__(snakemake, PonAbe_IM_msprime_simulator.params_default)
+        self.true_values = {"s": self.s_true, 
+            "nu1": self.nu1_true, 
+            "nu2": self.nu2_true, 
+            "T": self.T_true, 
+            "m12": self.m12_true, 
+            "m21": self.m21_true}
+        self.bounds = {"s": (self.s_low, self.s_high),
+            "nu1": (self.nu1_low, self.nu1_high),
+            "nu2": (self.nu2_low, self.nu2_high),
+            "T": (self.T_low, self.T_high),
+            "m12": (self.m12_low, self.m12_high),
+            "m21": (self.m21_low, self.m21_high)}
+        low = [self.bounds[key][0] for key in self.bounds.keys()]
+        high = [self.bounds[key][1] for key in self.bounds.keys()]
         self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
     def __call__(self, theta):
         if type(theta) is torch.Tensor:
-            log10_N_A, log10_N_B, log10_N_S, log10_T, log10_m_B_S, log10_m_S_B, s = theta.squeeze().cpu().tolist()
+            s, nu1, nu2, T, m12, m21 = theta.squeeze().cpu().tolist()
         elif type(theta) is list:
-            log10_N_A, log10_N_B, log10_N_S, log10_T, log10_m_B_S, log10_m_S_B, s = theta
-        N_A = 10 ** log10_N_A
-        N_B = 10 ** log10_N_B
-        N_S = 10 ** log10_N_S
-        T = 10 ** log10_T
-        m_B_S = 10 ** log10_m_B_S
-        m_S_B = 10 ** log10_m_S_B
+            s, nu1, nu2, T, m12, m21 = theta
 
-        model = PonAbe_split_migration_simulator.model
-        model.model.events[-1].initial_size = N_A
-        model.populations[0].initial_size = N_B
-        model.populations[1].initial_size = N_S
+        model = PonAbe_IM_msprime_simulator.model
+        model.populations[0].initial_size = nu1 * model.model.events[-1].initial_size
+        model.populations[1].initial_size = nu2 * model.model.events[-1].initial_size
         for i in range(len(model.model.events)):
-            model.model.events[i].time = T
-        r_B = -1 * np.log(s * N_A / N_B) / T
-        r_S = -1 * np.log((1-s) * N_A / N_S) / T
+            model.model.events[i].time = T * 2 * model.model.events[-1].initial_size
+        r_B = -1 * np.log(s / nu1) / (T * 2 * model.model.events[-1].initial_size)
+        r_S = -1 * np.log((1-s) / nu2) / (T * 2 * model.model.events[-1].initial_size)
         model.populations[0].growth_rate = r_B
         model.populations[1].growth_rate = r_S
-        model.model.migration_matrix[0, 1] = m_B_S
-        model.model.migration_matrix[1, 0] = m_S_B
+        model.model.migration_matrix[0, 1] = m12 / (2 * model.model.events[-1].initial_size)
+        model.model.migration_matrix[1, 0] = m21 / (2 * model.model.events[-1].initial_size)
         contig = self.species.get_contig(length=self.contig_length, mutation_rate=model.mutation_rate)
         engine = stdpopsim.get_engine("msprime")
         ts = engine.simulate(model, contig, samples=self.samples)
@@ -298,5 +304,5 @@ MODEL_LIST = {
     "HomSap_2epoch": HomSap_Africa_1b08_simulator,
     "gammaDFE_cnst_N": gammaDFE_cnst_N_simulator,
     "AnaPla_split_migration": AnaPla_split_migration_simulator,
-    "PonAbe_split_migration": PonAbe_split_migration_simulator
+    "PonAbe_IM_msprime": PonAbe_IM_msprime_simulator
 }
