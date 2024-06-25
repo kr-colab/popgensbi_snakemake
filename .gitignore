@@ -7,5 +7,4 @@ workflow/scripts/__pycache__/**
 workflow/results/**
 workflow/sbi-logs/**
 sbi-logs/**
-workflow/notebooks/**
-workflow_dadi/scripts/__pycache__/**
+sequential_msprime_workflow/notebooks/**
