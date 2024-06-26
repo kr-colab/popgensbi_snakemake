@@ -30,6 +30,7 @@ datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
 sim_rounds = snakemake.params.sim_rounds
 ensemble = snakemake.params.ensemble
+embedding_net = snakemake.params.embedding_net
 
 if not os.path.isdir(posteriordir):
     os.mkdir(posteriordir)
@@ -41,41 +42,27 @@ simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 prior = simulator.prior
 ns = simulator.ns
 
-# using default setup of CNN embedding network in sbi
-embedding_net = CNNEmbedding(
-    input_shape=(ns[0]+1, ns[1]+1),
-)
-# embedding_net = CNNEmbedding(
-#     input_shape=(ns[0]+1, ns[1]+1),
-#     in_channels=1,
-#     out_channels_per_layer=[6],
-#     num_conv_layers=1,
-#     num_linear_layers=1,
-#     output_dim=8,
-#     kernel_size=5,
-#     pool_kernel_size=8
-# )
+if embedding_net == "CNN":
+    if len(ns) == 2:
+    # using default setup of CNN embedding network in sbi
+        embedding_net = CNNEmbedding(
+        input_shape=(ns[0]+1, ns[1]+1),
+        )
+elif embedding_net == "Identity":
+    embedding_net = torch.nn.Identity().cuda()
+elif embedding_net == "MLP":
+    embedding_net = FCEmbedding(
+        input_dim=ns[0]+1
+    )
+
 
 normalizing_flow_density_estimator = posterior_nn(
-    model="maf",
-    embedding_net=embedding_net,
-    hidden_features=60,
-)
+        model="maf_rqs",
+        z_score_x="none",
+        embedding_net=embedding_net)
 
 log_dir = os.path.join(posteriordir, "sbi_logs", f"sim_round_{sim_rounds}", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
-# if int(sim_rounds) == 0:
-#     inference = SNPE(
-#     prior=prior, 
-#     density_estimator=normalizing_flow_density_estimator, 
-#     device="cuda",
-#     show_progress_bars=True, 
-#     summary_writer=writer)
-# else:
-#     with open(os.path.join(posteriordir, f"sim_round_{int(sim_rounds)-1}", f"inference.pkl"), "rb") as f:
-#         inference = pickle.load(f)
-
-# inference = inference.append_simulations(thetas, xs, proposal=prior)
 
 inference = SNPE(
     prior=prior, 
