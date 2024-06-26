@@ -53,13 +53,13 @@ elif snakemake.params.embedding_net == "MLP":
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).cuda()
 elif snakemake.params.embedding_net == "CNN":
     embedding_net = CNNEmbedding(input_shape=xs.shape[1:]).cuda()
+elif snakemake.params.embedding_net =="Identity":
+    embedding_net = torch.nn.Identity().cuda()
 
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
     z_score_x="none",
-    embedding_net=embedding_net,
-    hidden_features=64,
-    num_transforms=6,
+    embedding_net=embedding_net
 )
 # get the log directory for tensorboard summary writer
 log_dir = os.path.join(posteriordir, f"sim_round_{sim_rounds}", "sbi_logs", f"rep_{ensemble}")
