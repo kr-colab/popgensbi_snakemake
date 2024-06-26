@@ -151,7 +151,49 @@ class PonAbe_IM_sample_simulator(BaseSimulator):
         fs_sample = fs_sample / fs_sample.sum()
         return torch.tensor(fs_sample)
 
+class AraTha_2epoch_simulator(BaseSimulator):
+    '''
+    simulates 2 epoch model of Arabidopsis thaliana
+    using stdpopsim's catalog for default parameter values
+    Outputs sfs
+    '''
+    species = stdpopsim.get_species("AraTha")
+    model = species.get_demographic_model("African2Epoch_1H18")
+    params_default = {
+        "ns": (20,), # sample size
+        "pts": 100, # number of grid points
+        # ratio of current population size to ancestral population size
+        "nu_true": model.populations[0].initial_size / model.model.events[0].initial_size,
+        # time of size change scaled by 2 * ancestral population size
+        "T_true": model.model.events[0].time / (2 * model.model.events[0].initial_size),
+        "nu_low": 0.01,
+        "nu_high": 1,
+        "T_low": 0.01,
+        "T_high": 1.5, 
+        "contig_length": 10e6 # synonymous sequence length 
+        }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, AraTha_2epoch_simulator.params_default)
+        self.true_values = {"nu": self.nu_true, "T": self.T_true}
+        self.bounds = {"nu": (self.nu_low, self.nu_high), "T": (self.T_low, self.T_high)}
+        low = [self.bounds[key][0] for key in self.bounds.keys()]
+        high = [self.bounds[key][1] for key in self.bounds.keys()]
+        self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
+    def __call__(self, theta):
+        nu, T = theta.squeeze().cpu().tolist()
+        params = (nu, T)
+        fs = dadi.Demographics1D.two_epoch(params, self.ns, self.pts)
+        # in Huber et al. it is assumed that number of segregating synonymous sites = 4 N_e mu L
+        # this will be used to scale the sfs to Poisson sample from it
+        # (Ne is ancestral population size)
+        n_seg_sites = 4 * self.model.model.events[0].initial_size * self.model.mutation_rate * self.contig_length
+        fs_sample = (fs * n_seg_sites).sample()
+        # normalize fs_sample
+        fs_sample = fs_sample / fs_sample.sum()
+        return torch.tensor(fs_sample)
+
 MODEL_LIST = {
     "PonAbe_IM": PonAbe_IM_simulator, 
-    "PonAbe_IM_sample": PonAbe_IM_sample_simulator
+    "PonAbe_IM_sample": PonAbe_IM_sample_simulator,
+    "AraTha_2epoch": AraTha_2epoch_simulator
 }
