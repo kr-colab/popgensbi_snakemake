@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/PonAbe_IM_msprime.yaml"
+configfile: "config/amortized_msprime/AraTha_2epoch.yaml"
 
 n_sims_per_round = config["n_sims_per_round"] # number of simulations per round
 n_rounds = config["n_rounds"] # number of rounds
