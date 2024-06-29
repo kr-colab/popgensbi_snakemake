@@ -8,13 +8,14 @@ import numpy as np
 datadir = snakemake.params.datadir
 num_simulations = snakemake.params.num_simulations
 sim_rounds = snakemake.params.sim_rounds
+ts_processor = snakemake.params.ts_processor
 
 with open(f"{datadir}/sim_round_{sim_rounds}/{num_simulations}.trees", "rb") as ts_file:
     ts = tskit.load(ts_file)
 
-processor = PROCESSOR_LIST[snakemake.params.ts_processor](snakemake)
+processor = PROCESSOR_LIST[ts_processor](snakemake)
 
 x = processor(ts)
 # x is tensor, so change it to numpy first and save it as .npy
 x = x.squeeze().cpu().numpy()
-np.save(f"{datadir}/sim_round_{sim_rounds}/x_{num_simulations}.npy",x)
+np.save(f"{datadir}/{ts_processor}/sim_round_{sim_rounds}/x_{num_simulations}.npy",x)

@@ -13,10 +13,10 @@ from sbi.utils import posterior_nn
 from natsort import natsorted
 from torch.utils.tensorboard import SummaryWriter
 
-def load_data_files(data_dir, sim_rounds):
+def load_data_files(data_dir, ts_processor, sim_rounds):
     xs = []
     thetas = []
-    x_files_all = glob.glob(os.path.join(data_dir, f"sim_round_{sim_rounds}/", "x_*.npy"))
+    x_files_all = glob.glob(os.path.join(data_dir, ts_processor, f"sim_round_{sim_rounds}/", "x_*.npy"))
     x_files = natsorted(x_files_all)
     for xf in x_files:
         xs.append(np.load(xf))
@@ -29,23 +29,24 @@ def load_data_files(data_dir, sim_rounds):
 
 
 datadir = snakemake.params.datadir
+ts_processor = snakemake.params.ts_processor
 posteriordir = snakemake.params.posteriordir
 sim_rounds = snakemake.params.sim_rounds
 ensemble = snakemake.params.ensemble
 
 if not os.path.isdir(posteriordir):
     os.mkdir(posteriordir)
-if not os.path.isdir(os.path.join(posteriordir, f"sim_round_{sim_rounds}")):
-    os.mkdir(os.path.join(posteriordir, f"sim_round_{sim_rounds}"))
+if not os.path.isdir(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}")):
+    os.mkdir(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}"))
 
-thetas, xs = load_data_files(datadir, sim_rounds)
+thetas, xs = load_data_files(datadir, ts_processor, sim_rounds)
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 prior = simulator.prior
 
 if snakemake.params.embedding_net == "ExchangeableCNN":
-    if snakemake.params.ts_processor == "three_channel_feature_matrices":
+    if ts_processor == "three_channel_feature_matrices":
         embedding_net = ExchangeableCNN(channels=3).cuda()
-    elif snakemake.params.ts_processor == "dinf_multiple_pops":
+    elif ts_processor == "dinf_multiple_pops":
         embedding_net = ExchangeableCNN(unmasked_x_shps=[(2, v, snakemake.params.n_snps) for v in simulator.samples.values()]).cuda()
     else:
         embedding_net = ExchangeableCNN().cuda()
@@ -62,7 +63,7 @@ normalizing_flow_density_estimator = posterior_nn(
     embedding_net=embedding_net
 )
 # get the log directory for tensorboard summary writer
-log_dir = os.path.join(posteriordir, f"sim_round_{sim_rounds}", "sbi_logs", f"rep_{ensemble}")
+log_dir = os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", "sbi_logs", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
 inference = SNPE(
     prior=prior,
@@ -88,12 +89,12 @@ posterior = DirectPosterior(
     prior=prior, 
     device="cuda")
 
-with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(inference, f)
 # save posterior estimator (this contains trained normalizing flow - can be used for fine-turning?)
-with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", f"posterior_estimator_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"posterior_estimator_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior_estimator, f)
-with open(os.path.join(posteriordir, f"sim_round_{sim_rounds}", f"posterior_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"posterior_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior, f)
 
 
