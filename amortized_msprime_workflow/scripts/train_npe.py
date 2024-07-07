@@ -74,7 +74,7 @@ inference = SNPE(
 )
 
 for n in range(int(sim_rounds)+1):
-    thetas, xs = load_data_files(datadir, n)
+    thetas, xs = load_data_files(datadir, ts_processor, n)
     inference = inference.append_simulations(thetas, xs, proposal=prior)
 
 posterior_estimator = inference.append_simulations(thetas, xs).train(
