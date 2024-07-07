@@ -9,7 +9,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/AraTha_2epoch_dinf.yaml"
+configfile: "config/amortized_msprime/AraTha_2epoch_moments.yaml"
 
 n_sims_per_round = config["n_sims_per_round"] # number of simulations per round
 n_rounds = config["n_rounds"] # number of rounds
@@ -76,9 +76,9 @@ rule train_npe:
     log:
         "logs/train_npe_round_{k}_rep_{e}.log"
     resources:
-        mem_mb="20000",
+        mem_mb="50000",
         slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-40gb"
     params:
         sim_rounds="{k}",
         ensemble="{e}",
@@ -95,9 +95,9 @@ rule posterior_ensemble:
     log:
         "logs/posterior_ensemble_round_{k}.log"
     resources:
-        mem_mb="32000",
+        mem_mb="50000",
         slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-40gb"
     params:
         sim_rounds="{k}",
         **{k: v for k, v in config.items()}
@@ -113,9 +113,9 @@ rule plot_posterior:
         os.path.join(posteriordir, ts_processor, "sim_round_{k}/default_obs_corner.png")
     log: "logs/plot_posterior_round_{k}.log"
     resources:
-        mem_mb="5000",
+        mem_mb="50000",
         slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-40gb"
     params:
         sim_rounds=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}

@@ -259,9 +259,9 @@ class moments_LD_stats(BaseProcessor):
         import moments
         import gzip
         import os 
-        datadir = snakemake.params.datadir
-        rounds = snakemake.params.rounds
-        num_simulations = snakemake.params.num_simulations
+        datadir = self.datadir
+        rounds = self.rounds
+        num_simulations = self.num_simulations
         vcf_name = f"{datadir}/round_{rounds}/{num_simulations}.vcf"
         with open(vcf_name, "w+") as fout:
             ts.write_vcf(fout)
@@ -313,6 +313,8 @@ class moments_LD_stats(BaseProcessor):
         # final rows are copies of H
         for i in range(len(means[-1])):
             ld_stats_mat[-i-1] = np.ones(len(means)-1) * means[-1][-i-1]
+        # flatten ld_stats_mat
+        ld_stats_mat = ld_stats_mat.flatten()
         return torch.from_numpy(ld_stats_mat).float()
 
 PROCESSOR_LIST = {
