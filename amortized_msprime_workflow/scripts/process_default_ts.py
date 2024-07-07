@@ -1,5 +1,5 @@
 import torch
-
+import tskit
 import os
 import numpy as np
 from ts_processors import *
