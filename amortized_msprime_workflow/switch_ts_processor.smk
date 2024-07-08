@@ -41,6 +41,8 @@ rule process_default_ts:
         os.path.join(datadir, ts_processor, "x_obs.npy")
     log:
         "logs/process_default_ts.log"
+    resources:
+        mem_mb="10000"
     params:
         **{k: v for k, v in config.items()}
     script:
@@ -56,6 +58,8 @@ rule process_ts:
         os.path.join(datadir, ts_processor, "sim_round_{k}/x_{i}.npy")
     log:
         "logs/process_ts_round_{k}_{i}.log"
+    resources:
+        mem_mb="10000"
     params:
         num_simulations=lambda wildcards: wildcards.i,
         sim_rounds=lambda wildcards: wildcards.k,
