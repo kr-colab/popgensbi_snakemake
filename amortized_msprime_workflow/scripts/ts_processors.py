@@ -257,65 +257,79 @@ class moments_LD_stats(BaseProcessor):
         super().__init__(snakemake, moments_LD_stats.params_default)
     def __call__(self, ts):
         import moments
-        import gzip
-        import os 
-        datadir = self.datadir
-        rounds = self.rounds
-        num_simulations = self.num_simulations
-        vcf_name = f"{datadir}/round_{rounds}/{num_simulations}.vcf"
-        with open(vcf_name, "w+") as fout:
-            ts.write_vcf(fout)
-        os.system(f"gzip {vcf_name}")
-        vcf_file = f"{vcf_name}.gz"
-        map_file = f"{datadir}/round_{rounds}/{num_simulations}.map.txt"
-        Map_cm = ts.sequence_length * contig.recombination_map.rate[0] * 100
-        with open(map_file, "w+") as fout:
-            fout.write("pos\tMap(cM)\n")
-            fout.write("0\t0\n")
-            fout.write(f"{int(ts.sequence_length)}\t{Map_cm}\n")
-        r_bins = np.logspace(round(np.log10(contig.recombination_map.rate[0]))+1, 
-                        round(np.log10(contig.recombination_map.rate[0] * contig.length))-1,
-                        self.n_bins)
-        if ts.num_populations > 1:
-            pops_rep = []
-            for n in range(ts.num_populations):
-                for i in range(int(len(ts.samples(n))/2)):
-                    pops_rep.append(ts.population(n).metadata['name'])
-            pop_file = f"{datadir}/round_{rounds}/{num_simulations}.map.txt"                    
-            with open(pop_file, "w+") as fout:
-                fout.write("sample\tpop\n")
-                for j, pop in enumerate(pops_rep):
-                    fout.write(f"tsk_{j}\t{pop}\n")
-            pops = [ts.population(n).metadata['name'] for n in range(ts.num_populations)]
-            ld_stats = moments.LD.Parsing.comput_ld_statistics(
-                vcf_file,
-                rec_map_file = map_file,
-                pop_file = pop_file,
-                pops=pops,
-                r_bins=r_bins,
-                report=False
-            )
-        else:
-            ld_stats = moments.LD.Parsing.compute_ld_statistics(
-                vcf_file,
-                rec_map_file = map_file,
-                r_bins=r_bins,
-                report=False
-            )
+        output = []
+
+        positions = np.array(ts.tables.sites.position)
+        distances = []
+        for i in range(len(positions)-1):
+            for j in range(i+1, len(positions)):
+               distances.append(positions[j] - positions[i])
         
-        means = moments.LD.Parsing.means_from_region_data({0:ld_stats}, ld_stats['stats'], norm_idx=0)
-        ld_stats_mat = np.zeros((len(means[0])+len(means[-1])+1, len(means)-1))
-        # first row is edges of recombination bins
-        ld_stats_mat[0] = 0.5 * (r_bins[1:] + r_bins[:-1])
-        # next rows are LD statistics
-        for i in range(len(means[0])):
-            ld_stats_mat[i+1] = [means[j][i] for j in range(len(means)-1)]
-        # final rows are copies of H
-        for i in range(len(means[-1])):
-            ld_stats_mat[-i-1] = np.ones(len(means)-1) * means[-1][-i-1]
-        # flatten ld_stats_mat
-        ld_stats_mat = ld_stats_mat.flatten()
-        return torch.from_numpy(ld_stats_mat).float()
+        pos_bins = np.logspace(np.log10(min(distances)), np.log10(max(distances)), num=self.n_bins, base=10)
+        output.append((pos_bins[:-1]+pos_bins[1:])/2)
+        inds = np.digitize(distances, pos_bins)
+
+        Gs = [ts.genotype_matrix(samples=ts.samples(population=i)) for i in range(ts.num_populations)]
+            # First compute stats within each population
+        for i in range(ts.num_populations):
+            D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i])
+            D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+            D2_pw_binned_var = np.zeros(len(pos_bins)-1)
+            Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
+            Dz_pw_binned_var = np.zeros(len(pos_bins)-1)
+            pi2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+            pi2_pw_binned_var = np.zeros(len(pos_bins)-1)
+            D_pw_binned_mean = np.zeros(len(pos_bins)-1)
+            D_pw_binned_var = np.zeros(len(pos_bins)-1)
+            for j in range(len(pos_bins)-1):
+                D2_pw_binned_mean[j] = np.mean(D2_pw[inds==j+1])
+                D2_pw_binned_var[j] = np.var(D2_pw[inds==j+1])
+                Dz_pw_binned_mean[j] = np.mean(Dz_pw[inds==j+1])
+                Dz_pw_binned_var[j] = np.var(Dz_pw[inds==j+1])
+                pi2_pw_binned_mean[j] = np.mean(pi2_pw[inds==j+1])
+                pi2_pw_binned_var[j] = np.var(pi2_pw[inds==j+1])
+                D_pw_binned_mean[j] = np.mean(D_pw[inds==j+1])
+                D_pw_binned_var[j] = np.var(D_pw[inds==j+1])
+            output.append(D2_pw_binned_mean)
+            output.append(D2_pw_binned_var)
+            output.append(Dz_pw_binned_mean)
+            output.append(Dz_pw_binned_var)
+            output.append(pi2_pw_binned_mean)
+            output.append(pi2_pw_binned_var)
+            output.append(D_pw_binned_mean)
+            output.append(D_pw_binned_var)
+
+        if ts.num_populations > 1:
+            # If there are more than 1 population, compute stats between populations
+            for i in range(ts.num_populations):
+                for j in range(i+1, ts.num_populations):
+                    D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j])
+                    D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                    D2_pw_binned_var = np.zeros(len(pos_bins)-1)
+                    Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                    Dz_pw_binned_var = np.zeros(len(pos_bins)-1)
+                    pi2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                    pi2_pw_binned_var = np.zeros(len(pos_bins)-1)
+                    D_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                    D_pw_binned_var = np.zeros(len(pos_bins)-1)
+                    for k in range(len(pos_bins)-1):
+                        D2_pw_binned_mean[k] = np.mean(D2_pw[inds==k+1])
+                        D2_pw_binned_var[k] = np.var(D2_pw[inds==k+1])
+                        Dz_pw_binned_mean[k] = np.mean(Dz_pw[inds==k+1])
+                        Dz_pw_binned_var[k] = np.var(Dz_pw[inds==k+1])
+                        pi2_pw_binned_mean[k] = np.mean(pi2_pw[inds==k+1])
+                        pi2_pw_binned_var[k] = np.var(pi2_pw[inds==k+1])
+                        D_pw_binned_mean[k] = np.mean(D_pw[inds==k+1])
+                        D_pw_binned_var[k] = np.var(D_pw[inds==k+1])
+                    output.append(D2_pw_binned_mean)
+                    output.append(D2_pw_binned_var)
+                    output.append(Dz_pw_binned_mean)
+                    output.append(Dz_pw_binned_var)
+                    output.append(pi2_pw_binned_mean)
+                    output.append(pi2_pw_binned_var)
+                    output.append(D_pw_binned_mean)
+                    output.append(D_pw_binned_var)
+        return torch.tensor(output).float()
 
 PROCESSOR_LIST = {
     "dinf": dinf_extract,
