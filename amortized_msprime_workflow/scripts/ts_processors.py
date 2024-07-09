@@ -252,6 +252,7 @@ class moments_LD_stats(BaseProcessor):
     '''
     params_default = {
         "n_bins": 10,
+        "n_snps": 5000,
     }
     def __init__(self, snakemake):
         super().__init__(snakemake, moments_LD_stats.params_default)
@@ -260,16 +261,22 @@ class moments_LD_stats(BaseProcessor):
         output = []
 
         positions = np.array(ts.tables.sites.position)
+        pos_bins = np.logspace(1, np.log10(ts.sequence_length) - 1, num=self.n_bins, base=10)
+
+        # todo : repeat downsampling and appending to output if sequence length is much bigger than n_snps.
+        downsample_inds = np.random.choice(range(len(positions)), self.n_snps, replace=False)
         distances = []
+        positions = positions[downsample_inds]
         for i in range(len(positions)-1):
             for j in range(i+1, len(positions)):
                distances.append(positions[j] - positions[i])
         
-        pos_bins = np.logspace(np.log10(min(distances)), np.log10(max(distances)), num=self.n_bins, base=10)
         output.append((pos_bins[:-1]+pos_bins[1:])/2)
         inds = np.digitize(distances, pos_bins)
 
-        Gs = [ts.genotype_matrix(samples=ts.samples(population=i)) for i in range(ts.num_populations)]
+        # make a genotype matrix that is just 0 or 1 (ancestral v.s. derived)
+        Gs = [(ts.genotype_matrix(samples=ts.samples(population=i))[downsample_inds,  :] > 0.5).astype(float)
+                     for i in range(ts.num_populations)]
             # First compute stats within each population
         for i in range(ts.num_populations):
             D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i])
