@@ -252,91 +252,97 @@ class moments_LD_stats(BaseProcessor):
     '''
     params_default = {
         "n_bins": 10,
-        "n_snps": 5000,
+        "n_snps": 5000, # number of rows in genotype matrix is max (n_snps, actual number of SNPs in ts)
+        "n_bootstrap": 5, # number of times to sample SNPs from ts
     }
     def __init__(self, snakemake):
         super().__init__(snakemake, moments_LD_stats.params_default)
     def __call__(self, ts):
         import moments
-        output = []
-
         positions = np.array(ts.tables.sites.position)
         pos_bins = np.logspace(1, np.log10(ts.sequence_length) - 1, num=self.n_bins, base=10)
+        n = 0
 
-        # todo : repeat downsampling and appending to output if sequence length is much bigger than n_snps.
-        downsample_inds = np.random.choice(range(len(positions)), self.n_snps, replace=False)
-        distances = []
-        positions = positions[downsample_inds]
-        for i in range(len(positions)-1):
-            for j in range(i+1, len(positions)):
-               distances.append(positions[j] - positions[i])
-        
-        output.append((pos_bins[:-1]+pos_bins[1:])/2)
-        inds = np.digitize(distances, pos_bins)
+        output = np.zeros((len(pos_bins)-1) * 8 * (ts.num_populations + ts.num_populations * (ts.num_populations - 1) // 2))
 
-        # make a genotype matrix that is just 0 or 1 (ancestral v.s. derived)
-        Gs = [(ts.genotype_matrix(samples=ts.samples(population=i))[downsample_inds,  :] > 0.5).astype(float)
-                     for i in range(ts.num_populations)]
-            # First compute stats within each population
-        for i in range(ts.num_populations):
-            D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i])
-            D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
-            D2_pw_binned_var = np.zeros(len(pos_bins)-1)
-            Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
-            Dz_pw_binned_var = np.zeros(len(pos_bins)-1)
-            pi2_pw_binned_mean = np.zeros(len(pos_bins)-1)
-            pi2_pw_binned_var = np.zeros(len(pos_bins)-1)
-            D_pw_binned_mean = np.zeros(len(pos_bins)-1)
-            D_pw_binned_var = np.zeros(len(pos_bins)-1)
-            for j in range(len(pos_bins)-1):
-                D2_pw_binned_mean[j] = np.mean(D2_pw[inds==j+1])
-                D2_pw_binned_var[j] = np.var(D2_pw[inds==j+1])
-                Dz_pw_binned_mean[j] = np.mean(Dz_pw[inds==j+1])
-                Dz_pw_binned_var[j] = np.var(Dz_pw[inds==j+1])
-                pi2_pw_binned_mean[j] = np.mean(pi2_pw[inds==j+1])
-                pi2_pw_binned_var[j] = np.var(pi2_pw[inds==j+1])
-                D_pw_binned_mean[j] = np.mean(D_pw[inds==j+1])
-                D_pw_binned_var[j] = np.var(D_pw[inds==j+1])
-            output.append(D2_pw_binned_mean)
-            output.append(D2_pw_binned_var)
-            output.append(Dz_pw_binned_mean)
-            output.append(Dz_pw_binned_var)
-            output.append(pi2_pw_binned_mean)
-            output.append(pi2_pw_binned_var)
-            output.append(D_pw_binned_mean)
-            output.append(D_pw_binned_var)
+        while n < self.n_bootstrap:
+            n += 1
+            # todo : repeat downsampling and appending to output if sequence length is much bigger than n_snps.
+            downsample_inds = np.random.choice(range(len(positions)), self.n_snps, replace=False)
+            distances = []
+            positions = positions[downsample_inds]
+            for i in range(len(positions)-1):
+                for j in range(i+1, len(positions)):
+                distances.append(positions[j] - positions[i])
+                    inds = np.digitize(distances, pos_bins)
 
-        if ts.num_populations > 1:
-            # If there are more than 1 population, compute stats between populations
+            # make a genotype matrix that is just 0 or 1 (ancestral v.s. derived)
+            Gs = [(ts.genotype_matrix(samples=ts.samples(population=i))[downsample_inds,  :] > 0.5).astype(float)
+                        for i in range(ts.num_populations)]
+                # First compute stats within each population
             for i in range(ts.num_populations):
-                for j in range(i+1, ts.num_populations):
-                    D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j])
-                    D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
-                    D2_pw_binned_var = np.zeros(len(pos_bins)-1)
-                    Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
-                    Dz_pw_binned_var = np.zeros(len(pos_bins)-1)
-                    pi2_pw_binned_mean = np.zeros(len(pos_bins)-1)
-                    pi2_pw_binned_var = np.zeros(len(pos_bins)-1)
-                    D_pw_binned_mean = np.zeros(len(pos_bins)-1)
-                    D_pw_binned_var = np.zeros(len(pos_bins)-1)
-                    for k in range(len(pos_bins)-1):
-                        D2_pw_binned_mean[k] = np.mean(D2_pw[inds==k+1])
-                        D2_pw_binned_var[k] = np.var(D2_pw[inds==k+1])
-                        Dz_pw_binned_mean[k] = np.mean(Dz_pw[inds==k+1])
-                        Dz_pw_binned_var[k] = np.var(Dz_pw[inds==k+1])
-                        pi2_pw_binned_mean[k] = np.mean(pi2_pw[inds==k+1])
-                        pi2_pw_binned_var[k] = np.var(pi2_pw[inds==k+1])
-                        D_pw_binned_mean[k] = np.mean(D_pw[inds==k+1])
-                        D_pw_binned_var[k] = np.var(D_pw[inds==k+1])
-                    output.append(D2_pw_binned_mean)
-                    output.append(D2_pw_binned_var)
-                    output.append(Dz_pw_binned_mean)
-                    output.append(Dz_pw_binned_var)
-                    output.append(pi2_pw_binned_mean)
-                    output.append(pi2_pw_binned_var)
-                    output.append(D_pw_binned_mean)
-                    output.append(D_pw_binned_var)
-        return torch.tensor(output).float()
+                D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i])
+                D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                D2_pw_binned_var = np.zeros(len(pos_bins)-1)
+                Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                Dz_pw_binned_var = np.zeros(len(pos_bins)-1)
+                pi2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                pi2_pw_binned_var = np.zeros(len(pos_bins)-1)
+                D_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                D_pw_binned_var = np.zeros(len(pos_bins)-1)
+                for j in range(len(pos_bins)-1):
+                    D2_pw_binned_mean[j] = np.mean(D2_pw[inds==j+1])
+                    D2_pw_binned_var[j] = np.var(D2_pw[inds==j+1])
+                    Dz_pw_binned_mean[j] = np.mean(Dz_pw[inds==j+1])
+                    Dz_pw_binned_var[j] = np.var(Dz_pw[inds==j+1])
+                    pi2_pw_binned_mean[j] = np.mean(pi2_pw[inds==j+1])
+                    pi2_pw_binned_var[j] = np.var(pi2_pw[inds==j+1])
+                    D_pw_binned_mean[j] = np.mean(D_pw[inds==j+1])
+                    D_pw_binned_var[j] = np.var(D_pw[inds==j+1])
+                output[(len(pos_bins)-1)*8*i:(len(pos_bins)-1)*(8*i+1)] += D2_pw_binned_mean
+                output[(len(pos_bins)-1)*(8*i+1):(len(pos_bins)-1)*(8*i+2)] += D2_pw_binned_var
+                output[(len(pos_bins)-1)*(8*i+2):(len(pos_bins)-1)*(8*i+3)] += Dz_pw_binned_mean
+                output[(len(pos_bins)-1)*(8*i+3):(len(pos_bins)-1)*(8*i+4)] += Dz_pw_binned_var
+                output[(len(pos_bins)-1)*(8*i+4):(len(pos_bins)-1)*(8*i+5)] += pi2_pw_binned_mean
+                output[(len(pos_bins)-1)*(8*i+5):(len(pos_bins)-1)*(8*i+6)] += pi2_pw_binned_var
+                output[(len(pos_bins)-1)*(8*i+6):(len(pos_bins)-1)*(8*i+7)] += D_pw_binned_mean
+                output[(len(pos_bins)-1)*(8*i+7):(len(pos_bins)-1)*(8*i+8)] += D_pw_binned_var
+                
+
+            if ts.num_populations > 1:
+                k = 0
+                # If there are more than 1 population, compute stats between populations
+                for i in range(ts.num_populations):
+                    for j in range(i+1, ts.num_populations):
+                        D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j])
+                        D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                        D2_pw_binned_var = np.zeros(len(pos_bins)-1)
+                        Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                        Dz_pw_binned_var = np.zeros(len(pos_bins)-1)
+                        pi2_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                        pi2_pw_binned_var = np.zeros(len(pos_bins)-1)
+                        D_pw_binned_mean = np.zeros(len(pos_bins)-1)
+                        D_pw_binned_var = np.zeros(len(pos_bins)-1)
+                        for k in range(len(pos_bins)-1):
+                            D2_pw_binned_mean[k] = np.mean(D2_pw[inds==k+1])
+                            D2_pw_binned_var[k] = np.var(D2_pw[inds==k+1])
+                            Dz_pw_binned_mean[k] = np.mean(Dz_pw[inds==k+1])
+                            Dz_pw_binned_var[k] = np.var(Dz_pw[inds==k+1])
+                            pi2_pw_binned_mean[k] = np.mean(pi2_pw[inds==k+1])
+                            pi2_pw_binned_var[k] = np.var(pi2_pw[inds==k+1])
+                            D_pw_binned_mean[k] = np.mean(D_pw[inds==k+1])
+                            D_pw_binned_var[k] = np.var(D_pw[inds==k+1])
+                        output[(len(pos_bins)-1)*8*(ts.num_populations+k):(len(pos_bins)-1)*(8*(ts.num_populations+k)+1)] += D2_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+1):(len(pos_bins)-1)*(8*(ts.num_populations+k)+2)] += D2_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+2):(len(pos_bins)-1)*(8*(ts.num_populations+k)+3)] += Dz_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+3):(len(pos_bins)-1)*(8*(ts.num_populations+k)+4)] += Dz_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+4):(len(pos_bins)-1)*(8*(ts.num_populations+k)+5)] += pi2_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+5):(len(pos_bins)-1)*(8*(ts.num_populations+k)+6)] += pi2_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+6):(len(pos_bins)-1)*(8*(ts.num_populations+k)+7)] += D_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+7):(len(pos_bins)-1)*(8*(ts.num_populations+k)+8)] += D_pw_binned_var
+                        k += 1
+        output /= self.n_bootstrap
+        return torch.from_numpy(output).float()
 
 PROCESSOR_LIST = {
     "dinf": dinf_extract,
