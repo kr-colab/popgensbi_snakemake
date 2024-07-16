@@ -4,3 +4,4 @@ n_rounds : 20
 datadir: "results/PonAbe_IM/data/"
 posteriordir: "results/PonAbe_IM/posterior/"
 demog_model: "PonAbe_IM"
+embedding_net: "CNN"

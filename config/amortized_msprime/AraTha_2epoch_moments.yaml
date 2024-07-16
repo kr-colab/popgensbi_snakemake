@@ -1,0 +1,8 @@
+datadir: "results/amortized_msprime/AraTha_2epoch/data/"
+posteriordir: "results/amortized_msprime/AraTha_2epoch/posterior/"
+demog_model: "AraTha_2epoch"
+ts_processor: "moments_LD_stats"
+embedding_net: "MLP"
+n_sims_per_round : 1000
+n_rounds : 20
+n_ensemble: 10 # number of ensemble members

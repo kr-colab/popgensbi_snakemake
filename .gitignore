@@ -8,3 +8,6 @@ workflow/results/**
 workflow/sbi-logs/**
 sbi-logs/**
 sequential_msprime_workflow/notebooks/**
+amortized_dadi_workflow/scripts/__pycache__/**
+amortized_msprime_workflow/scripts/__pycache__/**
+sequential_msprime_workflow/scripts/__pycache__/**

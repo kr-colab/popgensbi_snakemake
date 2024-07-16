@@ -1,8 +1,15 @@
+# use after running main_workflow
+# make sure all *.trees are available for this workflow 
+# Specifically, run main_workflow with the same
+# datadir, demog_model, n_sims_per_round,n_rounds, n_ensemble 
+# as the config used in this Snakefile.
 
+# this is identical to main_workflow.smk except it doesn't have rule simulate_default_ts or rule simulate_ts.
+# We use existing tree sequences, but make new summary stats(x.npy's) and train NPE on the new summary stats.
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/AraTha_2epoch.yaml"
+configfile: "config/amortized_msprime/AraTha_2epoch_moments.yaml"
 
 n_sims_per_round = config["n_sims_per_round"] # number of simulations per round
 n_rounds = config["n_rounds"] # number of rounds
@@ -13,10 +20,7 @@ ts_processor = config["ts_processor"] # name of the ts processor used
 
 rule all:
     input:
-        os.path.join(datadir, "ts_star.trees"),
         os.path.join(datadir, ts_processor, "x_obs.npy"),
-        expand(os.path.join(datadir, "sim_round_{k}/{i}.trees"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
-        expand(os.path.join(datadir, "sim_round_{k}/theta_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
         expand(os.path.join(datadir, ts_processor, "sim_round_{k}/x_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
         expand(os.path.join(posteriordir, ts_processor, "sim_round_{k}/posterior_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
         expand(os.path.join(posteriordir, ts_processor, "sim_round_{k}/posterior_estimator_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
@@ -27,18 +31,6 @@ rule all:
         expand(os.path.join(posteriordir, ts_processor, "sim_round_{k}/confidence_intervals.png"), k=list(range(n_rounds))),
         expand(os.path.join(posteriordir, ts_processor, "sim_round_{k}/confidence_intervals.npy"), k=list(range(n_rounds)))
 
-
-rule simulate_default_ts:
-    message:
-        "simulating with default thetas..."
-    output:
-        os.path.join(datadir, "ts_star.trees")
-    log:
-        "logs/simulate_default_ts.log"
-    params:
-        **{k: v for k, v in config.items()}
-    script:
-        "scripts/simulate_default_ts.py"
 
 rule process_default_ts:
     message:
@@ -54,21 +46,6 @@ rule process_default_ts:
     script:
         "scripts/process_default_ts.py"
 
-
-rule simulate_ts:
-    message:
-        "simulating ts for round {wildcards.k}..."
-    output:
-        os.path.join(datadir, "sim_round_{k}/", "{i}.trees"),
-        os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"),
-    log:
-        "logs/simulate_ts_round_{k}_{i}.log"
-    params:
-        num_simulations=lambda wildcards: wildcards.i,
-        sim_rounds=lambda wildcards: wildcards.k,
-        **{k: v for k, v in config.items()}
-    script:
-        "scripts/simulate_ts.py"
 
 rule process_ts:
     message:
@@ -99,9 +76,9 @@ rule train_npe:
     log:
         "logs/train_npe_round_{k}_rep_{e}.log"
     resources:
-        mem_mb="20000",
+        mem_mb="50000",
         slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-40gb"
     params:
         sim_rounds="{k}",
         ensemble="{e}",
@@ -118,9 +95,9 @@ rule posterior_ensemble:
     log:
         "logs/posterior_ensemble_round_{k}.log"
     resources:
-        mem_mb="32000",
+        mem_mb="50000",
         slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-40gb"
     params:
         sim_rounds="{k}",
         **{k: v for k, v in config.items()}
@@ -136,9 +113,9 @@ rule plot_posterior:
         os.path.join(posteriordir, ts_processor, "sim_round_{k}/default_obs_corner.png")
     log: "logs/plot_posterior_round_{k}.log"
     resources:
-        mem_mb="5000",
+        mem_mb="50000",
         slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-40gb"
     params:
         sim_rounds=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}

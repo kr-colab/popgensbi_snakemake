@@ -1,3 +1,5 @@
+## ts_simulators outputs tree sequence. This cannot be used as a simulator for simulate_for_sbi!
+
 import stdpopsim
 import torch
 from sbi.utils import BoxUniform
@@ -10,52 +12,40 @@ class BaseSimulator:
                 setattr(self, key, snakemake.params[key])
             else:
                 setattr(self, key, default)
-            
-## ts_simulators outputs tree sequence. This cannot be used as a simulator for simulate_for_sbi!
+
+# Modified to match dadi simulator            
 class AraTha_2epoch_simulator(BaseSimulator):
     species = stdpopsim.get_species("AraTha")
     model = species.get_demographic_model("African2Epoch_1H18")
     params_default = {
         "n_sample": 10,
-        "N_A_true": model.model.events[0].initial_size,
-        "N_0_true": model.populations[0].initial_size,
-        "t_1_true": model.model.events[0].time,
-        "mutation_rate_true": model.mutation_rate,
-        "N_A_low": 10_000,
-        "N_A_high": 1_000_000,
-        "N_0_low": 10_000,
-        "N_0_high": 1_000_000,
-        "t_1_low": 1_000,
-        "t_1_high": 1_000_000,
-        "mutation_rate_low": 0,
-        "mutation_rate_high": 1.0e-8,
+        "nu_true": model.populations[0].initial_size / model.model.events[0].initial_size,
+        "T_true": model.model.events[0].time / (2 * model.model.events[0].initial_size),
+        "nu_low": 0.01,
+        "nu_high": 1,
+        "T_low": 0.01,
+        "T_high": 1.5,
         "contig_length": 10e6,
     }
     def __init__(self, snakemake):
         super().__init__(snakemake, AraTha_2epoch_simulator.params_default)
-
-        self.true_values = {"N_A": self.N_A_true, "N_0": self.N_0_true, "t_1": self.t_1_true, "mutation_rate": self.mutation_rate_true}
-        self.bounds = {"N_A": (self.N_A_low, self.N_A_high),
-                        "N_0": (self.N_0_low, self.N_0_high),
-                        "t_1": (self.t_1_low, self.t_1_high),
-                        "mutation_rate": (self.mutation_rate_low, self.mutation_rate_high),
-                        }
+        self.true_values = {"nu": self.nu_true, "T": self.T_true}
+        self.bounds = {"nu": (self.nu_low, self.nu_high), "T": (self.T_low, self.T_high)}
         low = [self.bounds[p][0] for p in self.bounds.keys()]
         high = [self.bounds[p][1] for p in self.bounds.keys()]
         self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
 
     def __call__(self, theta):
         if type(theta) is torch.Tensor:
-            N_A, N_0, t_1, mutation_rate = theta.squeeze().cpu().tolist()
+            nu, T = theta.squeeze().cpu().tolist()
         elif type(theta) is list:
-            N_A, N_0, t_1, mutation_rate = theta
+            nu, T = theta
         
         species = AraTha_2epoch_simulator.species
-        contig = species.get_contig(length=self.contig_length, mutation_rate=mutation_rate)
+        contig = species.get_contig(length=self.contig_length)
         model = AraTha_2epoch_simulator.model
-        model.populations[0].initial_size = N_0
-        model.model.events[0].initial_size = N_A
-        model.model.events[0].time = t_1
+        model.populations[0].initial_size = nu * model.model.events[0].initial_size
+        model.model.events[0].time = T * 2 * model.model.events[0].initial_size
         engine = stdpopsim.get_engine("msprime")
 
         ts = engine.simulate(model, contig, samples={"SouthMiddleAtlas": self.n_sample})

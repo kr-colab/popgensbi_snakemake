@@ -15,14 +15,11 @@ data = np.load(os.path.join(datadir, "fs_star.npy"))
 # get model fs
 model_fs = np.load(os.path.join(posteriordir, f"sim_round_{sim_rounds}/model_fs.npy"))
 
-# # load posterior samples
-# model_fs = np.load(os.path.join(posteriordir, f"sim_round_{sim_rounds}/sample_fs/fs_sample_0.npy"))
-# for i in range(1, 1000):
-#     model_fs += np.load(os.path.join(posteriordir, f"sim_round_{sim_rounds}/sample_fs/fs_sample_{i}.npy"))
-# model_fs /= 1000
-
 import pylab
 pylab.figure(figsize=(8,6))
-dadi.Plotting.plot_2d_comp_multinom(dadi.Spectrum(model_fs), dadi.Spectrum(data), vmin=1e-5)
+if len(data.shape) == 1:
+    dadi.Plotting.plot_1d_comp_multinom(dadi.Spectrum(model_fs), dadi.Spectrum(data))
+elif len(data.shape) == 2:
+    dadi.Plotting.plot_2d_comp_multinom(dadi.Spectrum(model_fs), dadi.Spectrum(data), vmin=1e-5)
 pylab.savefig(os.path.join(posteriordir, f"sim_round_{sim_rounds}/2d_comp_multinom.png"))
 
