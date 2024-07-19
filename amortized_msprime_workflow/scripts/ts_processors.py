@@ -253,7 +253,8 @@ class moments_LD_stats(BaseProcessor):
     params_default = {
         "n_bins": 10,
         "n_snps": 5000, # number of rows in genotype matrix is max (n_snps, actual number of SNPs in ts)
-        "n_bootstrap": 5, # number of times to sample SNPs from ts
+        "n_avg": 5, # number of times to sample SNPs from ts,
+        "phased": False # if true, we use a haplotype matrix (0 and 1) to calculate LD stats, if false, we use genotype matrix with 0, 1, and 2.
     }
     def __init__(self, snakemake):
         super().__init__(snakemake, moments_LD_stats.params_default)
@@ -265,23 +266,32 @@ class moments_LD_stats(BaseProcessor):
 
         output = np.zeros((len(pos_bins)-1) * 8 * (ts.num_populations + ts.num_populations * (ts.num_populations - 1) // 2))
 
-        while n < self.n_bootstrap:
+        while n < self.n_avg:
             n += 1
-            # todo : repeat downsampling and appending to output if sequence length is much bigger than n_snps.
-            downsample_inds = np.random.choice(range(len(positions)), self.n_snps, replace=False)
+            # downsample SNPs if n_snps is smaller than the actual number of SNPs
+            if len(positions) > self.n_snps:
+                downsample_inds = np.random.choice(range(len(positions)), self.n_snps, replace=False)
+                positions = positions[downsample_inds]                
+            # otherwise, use all SNPs
             distances = []
-            positions = positions[downsample_inds]
             for i in range(len(positions)-1):
                 for j in range(i+1, len(positions)):
-                distances.append(positions[j] - positions[i])
-                    inds = np.digitize(distances, pos_bins)
-
+                    distances.append(positions[j] - positions[i])
+            
+            inds = np.digitize(distances, pos_bins)
             # make a genotype matrix that is just 0 or 1 (ancestral v.s. derived)
             Gs = [(ts.genotype_matrix(samples=ts.samples(population=i))[downsample_inds,  :] > 0.5).astype(float)
-                        for i in range(ts.num_populations)]
+                            for i in range(ts.num_populations)]
+            if self.phased == False:
+                # if not phased, sum odd and even rows to get genotype of each individual (not each haplotype) = 0, 1 or 2
+                Gs = [Gs[i][:, ::2] + Gs[i][:, 1::2] for i in range(ts.num_populations)]
+
                 # First compute stats within each population
             for i in range(ts.num_populations):
-                D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i])
+                if self.phased:
+                    D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i], genotypes=False)
+                else:
+                    D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i], genotypes=True)
                 D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
                 D2_pw_binned_var = np.zeros(len(pos_bins)-1)
                 Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
@@ -314,7 +324,10 @@ class moments_LD_stats(BaseProcessor):
                 # If there are more than 1 population, compute stats between populations
                 for i in range(ts.num_populations):
                     for j in range(i+1, ts.num_populations):
-                        D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j])
+                        if self.phased:
+                            D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j], genotypes=False)
+                        else:
+                            D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j], genotypes=True)
                         D2_pw_binned_mean = np.zeros(len(pos_bins)-1)
                         D2_pw_binned_var = np.zeros(len(pos_bins)-1)
                         Dz_pw_binned_mean = np.zeros(len(pos_bins)-1)
@@ -341,7 +354,7 @@ class moments_LD_stats(BaseProcessor):
                         output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+6):(len(pos_bins)-1)*(8*(ts.num_populations+k)+7)] += D_pw_binned_mean
                         output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+7):(len(pos_bins)-1)*(8*(ts.num_populations+k)+8)] += D_pw_binned_var
                         k += 1
-        output /= self.n_bootstrap
+        output /= self.n_avg
         return torch.from_numpy(output).float()
 
 PROCESSOR_LIST = {
