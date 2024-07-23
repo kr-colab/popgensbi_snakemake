@@ -55,7 +55,7 @@ class ExchangeableCNN(nn.Module):
         super().__init__()
         self.sizes1 = (32, 64)
         self.sizes2 = (64,)
-        self.cnn_kernel_size = (1, 5)
+        self.cnn_kernel_size = (1, 50)
         self.activation = nn.ELU
         self.unmasked_x_shps = unmasked_x_shps
         feat_ext_inp_dim = 64 if unmasked_x_shps is None else 64 * len(unmasked_x_shps)
@@ -66,7 +66,7 @@ class ExchangeableCNN(nn.Module):
                     in_size,
                     feature_size,
                     self.cnn_kernel_size,
-                    stride=(1, 2),
+                    stride=(1, 25),
                     bias=False,
                 )
             )
