@@ -13,6 +13,13 @@ from sbi.utils import posterior_nn
 from natsort import natsorted
 from torch.utils.tensorboard import SummaryWriter
 
+# Use cuda if available unless we specifically asked for cpu in config
+if hasattr(snakemake.params, "device") and snakemake.params.device == "cpu":
+    device = torch.device("cpu")
+else:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
 def load_data_files(data_dir, ts_processor, sim_rounds):
     xs = []
     thetas = []
@@ -23,8 +30,8 @@ def load_data_files(data_dir, ts_processor, sim_rounds):
         var = os.path.basename(xf)[2:-4]
         thetas.append(np.load(os.path.join(data_dir, f"sim_round_{sim_rounds}/", f"theta_{var}.npy")))
 
-    xs = torch.from_numpy(np.array(xs)).to(torch.float32)
-    thetas = torch.from_numpy(np.array(thetas)).to(torch.float32)
+    xs = torch.from_numpy(np.array(xs)).to(torch.float32).to(device)
+    thetas = torch.from_numpy(np.array(thetas)).to(torch.float32).to(device)
     return thetas, xs
 
 
@@ -45,17 +52,17 @@ prior = simulator.prior
 
 if snakemake.params.embedding_net == "ExchangeableCNN":
     if ts_processor == "three_channel_feature_matrices":
-        embedding_net = ExchangeableCNN(channels=3).cuda()
+        embedding_net = ExchangeableCNN(channels=3).to(device)
     elif ts_processor == "dinf_multiple_pops":
-        embedding_net = ExchangeableCNN(unmasked_x_shps=[(2, v, snakemake.params.n_snps) for v in simulator.samples.values()]).cuda()
+        embedding_net = ExchangeableCNN(unmasked_x_shps=[(2, v, snakemake.params.n_snps) for v in simulator.samples.values()]).to(device)
     else:
         embedding_net = ExchangeableCNN().cuda()
 elif snakemake.params.embedding_net == "MLP":
-    embedding_net = FCEmbedding(input_dim = xs.shape[-1]).cuda()
+    embedding_net = FCEmbedding(input_dim = xs.shape[-1]).to(device)
 elif snakemake.params.embedding_net == "CNN":
-    embedding_net = CNNEmbedding(input_shape=xs.shape[1:]).cuda()
+    embedding_net = CNNEmbedding(input_shape=xs.shape[1:]).to(device)
 elif snakemake.params.embedding_net =="Identity":
-    embedding_net = torch.nn.Identity().cuda()
+    embedding_net = torch.nn.Identity().to(device)
 
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
@@ -68,7 +75,7 @@ writer = SummaryWriter(log_dir=log_dir)
 inference = SNPE(
     prior=prior,
     density_estimator=normalizing_flow_density_estimator,
-    device="cuda",
+    device=device,
     show_progress_bars=True,
     summary_writer=writer,
 )
@@ -87,7 +94,7 @@ writer.close()
 posterior = DirectPosterior(
     posterior_estimator=posterior_estimator, 
     prior=prior, 
-    device="cuda")
+    device=device)
 
 with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(inference, f)
