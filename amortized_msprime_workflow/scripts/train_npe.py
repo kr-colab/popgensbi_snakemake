@@ -56,7 +56,7 @@ if snakemake.params.embedding_net == "ExchangeableCNN":
     elif ts_processor == "dinf_multiple_pops":
         embedding_net = ExchangeableCNN(unmasked_x_shps=[(2, v, snakemake.params.n_snps) for v in simulator.samples.values()]).to(device)
     else:
-        embedding_net = ExchangeableCNN().cuda()
+        embedding_net = ExchangeableCNN().to(device)
 elif snakemake.params.embedding_net == "MLP":
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).to(device)
 elif snakemake.params.embedding_net == "CNN":
@@ -75,7 +75,7 @@ writer = SummaryWriter(log_dir=log_dir)
 inference = SNPE(
     prior=prior,
     density_estimator=normalizing_flow_density_estimator,
-    device=device,
+    device=device.type,
     show_progress_bars=True,
     summary_writer=writer,
 )
