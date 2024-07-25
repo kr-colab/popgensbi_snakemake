@@ -61,6 +61,10 @@ elif snakemake.params.embedding_net == "MLP":
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).cuda()
 elif snakemake.params.embedding_net == "CNN":
     embedding_net = CNNEmbedding(input_shape=xs.shape[1:]).cuda()
+elif snakemake.params.embedding_net == "SPIDNA":
+    embedding_net=SPIDNA(num_output=thetas.shape[-1]).cuda()
+elif snakemake.params.embedding_net == "FlagelNN":
+    embedding_net=FlagelNN(SNP_max=xs.shape[-1], nindiv=xs.shape[-2], num_params=thetas.shape[-1]).cuda()
 
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
@@ -90,7 +94,6 @@ posterior = DirectPosterior(
     posterior_estimator=posterior_estimator, 
     prior=prior, 
     device="cuda")
-
 
 pkl_file = os.path.join(posteriordir, f"round_{rounds}/", f"posterior_{ensemble}.pkl")
 with open(pkl_file, "wb") as f:
