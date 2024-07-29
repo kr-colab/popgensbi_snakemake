@@ -21,7 +21,7 @@ theta_star = simulator.true_values
 with open(f"{posteriordir}/{ts_processor}/sim_round_{sim_rounds}/ensemble_posterior.pkl", "rb") as f:
     posterior = pickle.load(f)   
 
-device = posteriors[-1]._device
+device = posterior._device
 try:
     x_obs = np.load(os.path.join(datadir, ts_processor, "x_obs.npy"))
     # Reshape x_obs to (1, *x_obs.shape) so that it knows that batch size is 1
