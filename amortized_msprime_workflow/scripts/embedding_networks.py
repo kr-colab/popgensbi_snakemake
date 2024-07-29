@@ -38,6 +38,12 @@ class ExchangeableCNN(nn.Module):
     num_individuals, then provide a list of tuples with each populations haplotype matrix
     shape in unmasked_x_shps. The forward pass will then mask out all padded values of -1
     which pad each haplotype matrix to the shape of the largest in the set
+
+    It has two cnn layers, followed by symmetric layer that pools over the individual axis and feature extractor (fully connected network).
+    Each CNN layer has 2D convolution layer with kernel and stride height = 1, ELU activation, and Batch normalization layer.
+    If the number of popultion is greater than one, the output of the first CNN layer is concatenated along the last axis.
+    (same as pg-gan by Mathieson et al.)
+    Then global pool make output dim (batch_size, outchannels2, 1, 1) and then pass to the feature extractor.
     """
 
     def __init__(self, latent_dim=5, unmasked_x_shps=None, channels=2, symmetric_func="max"):
@@ -53,43 +59,30 @@ class ExchangeableCNN(nn.Module):
             permutation invariant layers
         """
         super().__init__()
-        self.sizes1 = (32, 64)
-        self.sizes2 = (64,)
-        self.cnn_kernel_size = (1, 5)
+        self.outchannels1 = 32
+        self.outchannels2 = 160
+        self.kernel_size1 = (1, 50)
+        self.kernel_size2 = (1, 5)
+        self.stride1 = (1, 25)
+        self.stride2 = (1, 2)
+
         self.activation = nn.ELU
         self.unmasked_x_shps = unmasked_x_shps
-        feat_ext_inp_dim = 64 if unmasked_x_shps is None else 64 * len(unmasked_x_shps)
         cnn_layers = []
-        for in_size, feature_size in zip([channels, *self.sizes1], self.sizes1):
-            cnn_layers.append(
-                nn.Conv2d(
-                    in_size,
-                    feature_size,
-                    self.cnn_kernel_size,
-                    stride=(1, 2),
-                    bias=False,
-                )
-            )
-            cnn_layers.append(self.activation())
-            cnn_layers.append(nn.BatchNorm2d(num_features=feature_size))
-        cnn_layers.append(SymmetricLayer(axis=2, func=symmetric_func))
-        for feature_size in self.sizes2:
-            cnn_layers.append(
-                nn.Conv2d(
-                    feature_size,
-                    feature_size,
-                    self.cnn_kernel_size,
-                    stride=(1, 2),
-                    bias=False,
-                )
-            )
-            cnn_layers.append(self.activation())
-            cnn_layers.append(nn.BatchNorm2d(num_features=feature_size))
-        cnn_layers.append(SymmetricLayer(axis=3, func=symmetric_func))
+        cnn_layers.append(nn.Conv2d(channels, self.outchannels1, self.kernel_size1, stride=self.stride1))
+        cnn_layers.append(self.activation())
+        cnn_layers.append(nn.BatchNorm2d(num_features=self.outchannels1))
+        cnn_layers.append(nn.Conv2d(self.outchannels1, self.outchannels2, self.kernel_size2, stride=self.stride2))
+        cnn_layers.append(self.activation())
+        cnn_layers.append(nn.BatchNorm2d(num_features=self.outchannels2))
+
+
         self.cnn = nn.Sequential(*cnn_layers)
+        self.symmetric = SymmetricLayer(axis=2, func=symmetric_func)
+        self.globalpool = nn.AdaptiveAvgPool2d((1, 1)) 
         self.feature_extractor = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(feat_ext_inp_dim, 64),
+            nn.Linear(self.outchannels2, 64),
             nn.ReLU(),
             nn.Linear(64, latent_dim),
         )
@@ -106,12 +99,13 @@ class ExchangeableCNN(nn.Module):
                 mask = x[:, i, :, :, :] != -1
                 inds = torch.where(mask)
                 x_ = x[:, i, :, :, :][inds].view(batch_ndim, *shape)
-                xs.append(self.cnn(x_))
+                xs.append(self.symmetric(self.cnn(x_)))
             x = torch.cat(xs, dim=-1)
+            x = self.globalpool(x)
             return self.feature_extractor(x)
         # Otherwise we know there are no padded values and can just run the
         # input data through the network
-        return self.feature_extractor(self.cnn(x))
+        return self.feature_extractor(self.globalpool(self.symmetric(self.cnn(x))))
     
     def embedding(self, x):
         with torch.no_grad():

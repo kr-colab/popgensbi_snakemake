@@ -52,6 +52,49 @@ class AraTha_2epoch_simulator(BaseSimulator):
 
         return ts
 
+class AraTha_2epoch_genetic_map_simulator(BaseSimulator):
+    '''
+    Simulator for AraTha 2 epoch model with genetic map (SalomeAveraged_TAIR10)
+    Use a subset of chromosome 1 (from the left, clipped on the right) for simulation
+    '''
+    species = stdpopsim.get_species("AraTha")
+    model = species.get_demographic_model("African2Epoch_1H18")
+    N_anc = model.model.events[0].initial_size
+    params_default = {
+        "n_sample": 10,
+        "nu_true": model.populations[0].initial_size / N_anc,
+        "T_true": model.model.events[0].time / (2 * N_anc),
+        "nu_low": 0.01,
+        "nu_high": 1,
+        "T_low": 0.01,
+        "T_high": 1.5,
+        "contig_length": 1e6,
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, AraTha_2epoch_genetic_map_simulator.params_default)
+        self.true_values = {"nu": self.nu_true, "T": self.T_true}
+        self.bounds = {"nu": (self.nu_low, self.nu_high), "T": (self.T_low, self.T_high)}
+        low = [self.bounds[p][0] for p in self.bounds.keys()]
+        high = [self.bounds[p][1] for p in self.bounds.keys()]
+        self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
+
+    def __call__(self, theta):
+        if type(theta) is torch.Tensor:
+            nu, T = theta.squeeze().cpu().tolist()
+        elif type(theta) is list:
+            nu, T = theta
+        
+        species = AraTha_2epoch_genetic_map_simulator.species
+        contig = species.get_contig("chr1", genetic_map="SalomeAveraged_TAIR10", left=0, right=self.contig_length)
+        model = AraTha_2epoch_genetic_map_simulator.model
+        model.populations[0].initial_size = nu * model.model.events[0].initial_size
+        model.model.events[0].time = T * 2 * model.model.events[0].initial_size
+        engine = stdpopsim.get_engine("msprime")
+
+        ts = engine.simulate(model, contig, samples={"SouthMiddleAtlas": self.n_sample})
+
+        return ts
+
 class HomSap_Africa_1b08_simulator(BaseSimulator):
     species = stdpopsim.get_species("HomSap")
     model = species.get_demographic_model("Africa_1B08")
@@ -291,6 +334,7 @@ class PonAbe_IM_msprime_simulator(BaseSimulator):
 
 MODEL_LIST = {
     "AraTha_2epoch": AraTha_2epoch_simulator,
+    "AraTha_2epoch_genetic_map": AraTha_2epoch_genetic_map_simulator,
     "HomSap_2epoch": HomSap_Africa_1b08_simulator,
     "gammaDFE_cnst_N": gammaDFE_cnst_N_simulator,
     "AnaPla_split_migration": AnaPla_split_migration_simulator,
