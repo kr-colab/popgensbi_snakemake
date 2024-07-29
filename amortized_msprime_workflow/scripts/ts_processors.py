@@ -271,8 +271,10 @@ class moments_LD_stats(BaseProcessor):
             # downsample SNPs if n_snps is smaller than the actual number of SNPs
             if len(positions) > self.n_snps:
                 downsample_inds = np.random.choice(range(len(positions)), self.n_snps, replace=False)
-                positions = positions[downsample_inds]                
+                positions = positions[downsample_inds]
             # otherwise, use all SNPs
+            else:
+                downsample_inds = range(len(positions))                
             distances = []
             for i in range(len(positions)-1):
                 for j in range(i+1, len(positions)):
