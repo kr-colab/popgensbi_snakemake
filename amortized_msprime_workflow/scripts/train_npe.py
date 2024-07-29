@@ -94,7 +94,7 @@ writer.close()
 posterior = DirectPosterior(
     posterior_estimator=posterior_estimator, 
     prior=prior, 
-    device=device)
+    device=device.type)
 
 with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(inference, f)
