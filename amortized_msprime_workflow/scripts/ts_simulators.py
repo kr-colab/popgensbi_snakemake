@@ -68,7 +68,7 @@ class AraTha_2epoch_genetic_map_simulator(BaseSimulator):
         "nu_high": 1,
         "T_low": 0.01,
         "T_high": 1.5,
-        "contig_length": 10e6,
+        "contig_length": 1e6,
     }
     def __init__(self, snakemake):
         super().__init__(snakemake, AraTha_2epoch_genetic_map_simulator.params_default)
