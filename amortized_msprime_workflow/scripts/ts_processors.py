@@ -264,7 +264,14 @@ class moments_LD_stats(BaseProcessor):
         pos_bins = np.logspace(1, np.log10(ts.sequence_length) - 1, num=self.n_bins, base=10)
         n = 0
 
-        output = np.zeros((len(pos_bins)-1) * 8 * (ts.num_populations + ts.num_populations * (ts.num_populations - 1) // 2))
+
+        num_sampled_populations = 0
+        sampled_pop_ids = []
+        for pop in ts.populations():
+            if pop.metadata['sampling_time'] is not None:
+                num_sampled_populations += 1
+                sampled_pop_ids.append(pop.id)
+        output = np.zeros((len(pos_bins)-1) * 8 * (num_sampled_populations + num_sampled_populations * (num_sampled_populations - 1) // 2))
 
         while n < self.n_avg:
             n += 1
@@ -283,13 +290,13 @@ class moments_LD_stats(BaseProcessor):
             inds = np.digitize(distances, pos_bins)
             # make a genotype matrix that is just 0 or 1 (ancestral v.s. derived)
             Gs = [(ts.genotype_matrix(samples=ts.samples(population=i))[downsample_inds,  :] > 0.5).astype(float)
-                            for i in range(ts.num_populations)]
+                            for i in sampled_pop_ids]
             if self.phased == False:
                 # if not phased, sum odd and even rows to get genotype of each individual (not each haplotype) = 0, 1 or 2
-                Gs = [Gs[i][:, ::2] + Gs[i][:, 1::2] for i in range(ts.num_populations)]
+                Gs = [Gs[i][:, ::2] + Gs[i][:, 1::2] for i in range(num_sampled_populations)]
 
                 # First compute stats within each population
-            for i in range(ts.num_populations):
+            for i in range(num_sampled_populations):
                 if self.phased:
                     D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i], genotypes=False)
                 else:
@@ -319,13 +326,22 @@ class moments_LD_stats(BaseProcessor):
                 output[(len(pos_bins)-1)*(8*i+5):(len(pos_bins)-1)*(8*i+6)] += pi2_pw_binned_var
                 output[(len(pos_bins)-1)*(8*i+6):(len(pos_bins)-1)*(8*i+7)] += D_pw_binned_mean
                 output[(len(pos_bins)-1)*(8*i+7):(len(pos_bins)-1)*(8*i+8)] += D_pw_binned_var
-                
 
-            if ts.num_populations > 1:
-                k = 0
+            # there are more unique pairs of SNPs when there are more than 1 population
+            # so we need a new inds array
+            distances = []
+            for i in range(len(positions)):
+                for j in range(len(positions)):
+                    distances.append(positions[j] - positions[i])
+            
+            inds = np.digitize(distances, pos_bins)
+
+
+            if num_sampled_populations > 1:
+                pop_pair_idx = 0
                 # If there are more than 1 population, compute stats between populations
-                for i in range(ts.num_populations):
-                    for j in range(i+1, ts.num_populations):
+                for i in range(num_sampled_populations):
+                    for j in range(i+1, num_sampled_populations):
                         if self.phased:
                             D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j], genotypes=False)
                         else:
@@ -347,15 +363,16 @@ class moments_LD_stats(BaseProcessor):
                             pi2_pw_binned_var[k] = np.var(pi2_pw[inds==k+1])
                             D_pw_binned_mean[k] = np.mean(D_pw[inds==k+1])
                             D_pw_binned_var[k] = np.var(D_pw[inds==k+1])
-                        output[(len(pos_bins)-1)*8*(ts.num_populations+k):(len(pos_bins)-1)*(8*(ts.num_populations+k)+1)] += D2_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+1):(len(pos_bins)-1)*(8*(ts.num_populations+k)+2)] += D2_pw_binned_var
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+2):(len(pos_bins)-1)*(8*(ts.num_populations+k)+3)] += Dz_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+3):(len(pos_bins)-1)*(8*(ts.num_populations+k)+4)] += Dz_pw_binned_var
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+4):(len(pos_bins)-1)*(8*(ts.num_populations+k)+5)] += pi2_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+5):(len(pos_bins)-1)*(8*(ts.num_populations+k)+6)] += pi2_pw_binned_var
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+6):(len(pos_bins)-1)*(8*(ts.num_populations+k)+7)] += D_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+7):(len(pos_bins)-1)*(8*(ts.num_populations+k)+8)] += D_pw_binned_var
-                        k += 1
+                        
+                        output[(len(pos_bins)-1)*8*(num_sampled_populations+pop_pair_idx):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+1)] += D2_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+1):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+2)] += D2_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+2):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+3)] += Dz_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+3):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+4)] += Dz_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+4):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+5)] += pi2_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+5):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+6)] += pi2_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+6):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+7)] += D_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+7):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+8)] += D_pw_binned_var
+                        pop_pair_idx += 1
         output /= self.n_avg
         return torch.from_numpy(output).float()
 
