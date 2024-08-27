@@ -163,33 +163,33 @@ class HomSap_ooa_archaic_simulator(BaseSimulator):
         "N_OOA_low": 100,
         "N_OOA_high": 50_000,
         "r_CEU_low": 0,
-        "r_CEU_high": 0.1,
+        "r_CEU_high": 0.005,
         "r_CHB_low": 0,
-        "r_CHB_high": 0.1,
-        "T_arch_adm_end_low": 10,
-        "T_arch_adm_end_high": 10_000,
-        "T_EU_AS_low": 10,
-        "T_EU_AS_high": 10_000,
-        "T_B_low": 10,
-        "T_B_high": 10_000,
-        "T_arch_afr_mig_low": 10,
-        "T_arch_afr_mig_high": 10_000,
-        "T_AF_low": 10,
-        "T_AF_high": 10_000,
-        "T_arch_afr_split_low": 10,
-        "T_arch_afr_split_high": 10_000,
-        "T_nean_split_low": 10,
-        "T_nean_split_high": 10_000,
+        "r_CHB_high": 0.005,
+        "T_arch_adm_end_low": 10_000,
+        "T_arch_adm_end_high": 1_000_000,
+        "T_EU_AS_low": 10_000,
+        "T_EU_AS_high": 1_000_000,
+        "T_B_low": 10_000,
+        "T_B_high": 1_000_000,
+        "T_arch_afr_mig_low": 10_000,
+        "T_arch_afr_mig_high": 1_000_000,
+        "T_AF_low": 10_000,
+        "T_AF_high": 1_000_000,
+        "T_arch_afr_split_low": 10_000,
+        "T_arch_afr_split_high": 1_000_000,
+        "T_nean_split_low": 10_000,
+        "T_nean_split_high": 1_000_000,
         "m_YRI_CEU_low": 0.0,
-        "m_YRI_CEU_high": 0.01,
+        "m_YRI_CEU_high": 0.001,
         "m_CEU_CHB_low": 0.0,
-        "m_CEU_CHB_high": 0.01,
+        "m_CEU_CHB_high": 0.001,
         "m_AF_arch_af_low": 0.0,
-        "m_AF_arch_af_high": 0.01,
+        "m_AF_arch_af_high": 0.001,
         "m_OOA_nean_low": 0.0,
-        "m_OOA_nean_high": 0.01,
+        "m_OOA_nean_high": 0.001,
         "m_AF_B_low": 0.0,
-        "m_AF_B_high": 0.01,
+        "m_AF_B_high": 0.001,
         "contig_length": 1e6,
     }
     def __init__(self, snakemake):
@@ -238,10 +238,15 @@ class HomSap_ooa_archaic_simulator(BaseSimulator):
         }
         low = [self.bounds[p][0] for p in self.bounds.keys()]
         high = [self.bounds[p][1] for p in self.bounds.keys()]
-        N_distribution = BoxUniformZuko(torch.tensor(low[:5], dtype=torch.float32), torch.tensor(high[:5], dtype=torch.float32))
-        r_distribution = BoxUniformZuko(torch.tensor(low[5:7], dtype=torch.float32), torch.tensor(high[5:7], dtype=torch.float32))
-        T_distribution = Sort(Uniform(float(low[7]), float(high[7])), 7)
-        m_distribution = BoxUniformZuko(torch.tensor(low[14:], dtype=torch.float32), torch.tensor(high[14:], dtype=torch.float32))
+        if hasattr(snakemake.params, "device") and snakemake.params.device == "cpu":
+            device = torch.device("cpu")
+        else:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        N_distribution = BoxUniformZuko(torch.tensor(low[:5], dtype=torch.float32).to(device), torch.tensor(high[:5], dtype=torch.float32).to(device))
+        r_distribution = BoxUniformZuko(torch.tensor(low[5:7], dtype=torch.float32).to(device), torch.tensor(high[5:7], dtype=torch.float32).to(device))
+        T_distribution = Sort(Uniform(torch.tensor(low[7], dtype=torch.float32).to(device), torch.tensor(high[7], dtype=torch.float32).to(device)), 7)
+        m_distribution = BoxUniformZuko(torch.tensor(low[14:], dtype=torch.float32).to(device), torch.tensor(high[14:], dtype=torch.float32).to(device))
         self.prior = Joint(N_distribution, r_distribution, T_distribution, m_distribution)
 
     def __call__(self,theta):
