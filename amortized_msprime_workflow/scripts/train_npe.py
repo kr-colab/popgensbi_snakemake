@@ -1,6 +1,7 @@
 import glob
 import os
 import pickle
+import sys
 
 from embedding_networks import *
 from sbi.neural_nets.embedding_nets import *
@@ -57,11 +58,25 @@ elif snakemake.params.embedding_net == "CNN":
 elif snakemake.params.embedding_net =="Identity":
     embedding_net = torch.nn.Identity().cuda()
 
+elif snakemake.params.embedding_net == "SPIDNA":
+    xs = xs.unsqueeze(1)
+    net_param = {'num_SNP': xs.shape[-1],
+                     'num_sample': simulator.params_default['n_sample'],
+                     'num_output': thetas.shape[-1],
+                     'num_feature': simulator.params_default['n_sample'],
+                     'device': 'cuda'
+                     }
+    embedding_net = SPIDNA(**net_param)
+elif snakemake.params.embedding_net == "FlagelNN":
+    xs = xs.unsqueeze(1)
+    embedding_net=FlagelNN(SNP_max=xs.shape[-1], nindiv=simulator.params_default['n_sample'], num_params=thetas.shape[-1]).cuda()
+
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
     z_score_x="none",
     embedding_net=embedding_net
 )
+
 # get the log directory for tensorboard summary writer
 log_dir = os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", "sbi_logs", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
@@ -77,17 +92,15 @@ for n in range(int(sim_rounds)+1):
     thetas, xs = load_data_files(datadir, ts_processor, n)
     inference = inference.append_simulations(thetas, xs, proposal=prior)
 
-posterior_estimator = inference.append_simulations(thetas, xs).train(
+posterior_estimator = inference.append_simulations(thetas, xs)
+posterior_estimator.train(
     show_train_summary=True,
     retrain_from_scratch=True,
     validation_fraction=0.2,
 )
 
 writer.close()
-posterior = DirectPosterior(
-    posterior_estimator=posterior_estimator, 
-    prior=prior, 
-    device="cuda")
+posterior = posterior_estimator.build_posterior()
 
 with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(inference, f)

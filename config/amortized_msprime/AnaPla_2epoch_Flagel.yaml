@@ -1,0 +1,8 @@
+datadir: "results/amortized_msprime/AnaPla_2epoch_Flagel/data/"
+posteriordir: "results/amortized_msprime/AnaPla_2epoch_Flagel/posterior/"
+demog_model: "AraTha_2epoch"
+ts_processor: "dinf_reshape"
+embedding_net: "FlagelNN"
+n_sims_per_round : 2
+n_rounds : 2
+n_ensemble: 2 # number of ensemble members

@@ -1,7 +1,9 @@
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 from sbi.neural_nets.embedding_nets import *
+
 
 class SymmetricLayer(nn.Module):
     """
@@ -126,3 +128,119 @@ class ExchangeableCNN(nn.Module):
                 x = torch.cat(xs, dim=-1)
                 return self.feature_extractor[:2](x)
             return self.feature_extractor[:2](self.cnn(x))
+
+
+class SPIDNA(nn.Module):
+    def __init__(self, num_output, num_feature, device, num_block=7, **kwargs):
+        super(SPIDNA, self).__init__()
+        self.num_output = num_output
+        self.conv_pos = nn.Conv2d(1, num_feature, (1, 3))
+        self.conv_pos_bn = nn.BatchNorm2d(num_feature)
+        self.conv_snp = nn.Conv2d(1, num_feature, (1, 3))
+        self.conv_snp_bn = nn.BatchNorm2d(num_feature)
+        self.blocks = nn.ModuleList([SPIDNABlock(num_output, num_feature) for i in range(num_block)])
+        self.device = device
+
+    def forward(self, x):
+        pos = x[:, 0, :].view(x.shape[0], 1, 1, -1)
+        snp = x[:, 1:, :].unsqueeze(1)
+        pos = F.relu(self.conv_pos_bn(self.conv_pos(pos))).expand(-1, -1, snp.size(2), -1)
+        snp = F.relu(self.conv_snp_bn(self.conv_snp(snp)))
+        x = torch.cat((pos, snp), 1)
+        output = torch.zeros(x.size(0), self.num_output).to(self.device)
+        for block in self.blocks:
+            x, output = block(x, output)
+
+        return output
+
+
+class SPIDNABlock(nn.Module):
+    def __init__(self, num_output, num_feature):
+        super(SPIDNABlock, self).__init__()
+        self.num_output = num_output
+        self.phi = nn.Conv2d(num_feature * 2, num_feature, (1, 3))
+        self.phi_bn = nn.BatchNorm2d(num_feature * 2)
+        self.maxpool = nn.MaxPool2d((1, 2))
+        self.fc = nn.Linear(num_output, num_output)
+
+    def forward(self, x, output):
+        x = self.phi(self.phi_bn(x))
+        psi1 = torch.mean(x, 2, keepdim=True)
+        psi = psi1
+        current_output = self.fc(torch.mean(psi[:, :self.num_output, :, :], 3).squeeze(2))
+        output = output.cpu() + current_output.cpu()
+        psi = psi.expand(-1, -1, x.size(2), -1)
+        x = torch.cat((x, psi), 1)
+        x = F.relu(self.maxpool(x))
+        return x, output
+
+
+class FlagelNN(nn.Module):
+    def __init__(self, SNP_max, nindiv, num_params, kernel_size=2, pool_size=2, use_dropout=True):
+        super(FlagelNN, self).__init__()
+        self.use_dropout = use_dropout
+
+        self.conv1 = nn.Conv1d(in_channels=nindiv, out_channels=128, kernel_size=2)
+        self.pool1 = nn.AvgPool1d(kernel_size=2)
+        self.dropout1 = nn.Dropout(0.25)
+
+        self.conv2 = nn.Conv1d(in_channels=128, out_channels=128, kernel_size=2)
+        self.pool2 = nn.AvgPool1d(kernel_size=2)
+        self.dropout2 = nn.Dropout(0.25)
+
+        self.conv3 = nn.Conv1d(in_channels=128, out_channels=128, kernel_size=2)
+        self.pool3 = nn.AvgPool1d(kernel_size=2)
+        self.dropout3 = nn.Dropout(0.25)
+
+        self.conv4 = nn.Conv1d(in_channels=128, out_channels=128, kernel_size=2)
+        self.pool4 = nn.AvgPool1d(kernel_size=2)
+        self.dropout4 = nn.Dropout(0.25)
+
+        self.flatten = nn.Flatten()
+
+        # Dynamically compute the flattened output size
+        conv_output_size = SNP_max
+        for _ in range(4):
+            conv_output_size = (conv_output_size - (kernel_size - 1)) // pool_size
+        self.flattened_size = conv_output_size * 128
+
+        self.dense_b2 = nn.Linear(SNP_max, 32)
+        self.dropout_b2 = nn.Dropout(0.25)
+
+        self.dense_final = nn.Linear(self.flattened_size + 32, 256)  # Concatenated size
+        self.dropout_final = nn.Dropout(0.25)
+        self.output_layer = nn.Linear(256, num_params)
+
+    def forward(self, inp):
+        x1=inp[:, 1:, :]
+        x2=inp[:, 0, :]
+        x1 = self.pool1(F.relu(self.conv1(x1)))
+        if self.use_dropout:
+            x1 = self.dropout1(x1)
+
+        x1 = self.pool2(F.relu(self.conv2(x1)))
+        if self.use_dropout:
+            x1 = self.dropout2(x1)
+
+        x1 = self.pool3(F.relu(self.conv3(x1)))
+        if self.use_dropout:
+            x1 = self.dropout3(x1)
+
+        x1 = self.pool4(F.relu(self.conv4(x1)))
+        if self.use_dropout:
+            x1 = self.dropout4(x1)
+
+        x1 = self.flatten(x1)
+
+        x2 = F.relu(self.dense_b2(x2))
+        if self.use_dropout:
+            x2 = self.dropout_b2(x2)
+
+        x = torch.cat((x1, x2), dim=1)
+
+        x = F.relu(self.dense_final(x))
+        if self.use_dropout:
+            x = self.dropout_final(x)
+        x = self.output_layer(x)
+
+        return x
