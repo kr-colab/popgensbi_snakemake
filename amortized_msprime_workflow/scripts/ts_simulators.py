@@ -95,6 +95,81 @@ class AraTha_2epoch_genetic_map_simulator(BaseSimulator):
         ts = engine.simulate(model, contig, samples={"SouthMiddleAtlas": self.n_sample})
 
         return ts
+class YRI_CEU_simulator(BaseSimulator):
+    '''
+    simulate a custom model as defined in dadi's manual (https://dadi.readthedocs.io/en/latest/examples/YRI_CEU/YRI_CEU/).
+    Ancetral population grows, split, and CEU population undergoes a bottleneck upon splitting and then grows exponentially. 
+    There is a continuous migration between YRI and CEU.
+    Set ancestral population size to 1e4 and use optimal parameter values reported in the example. 
+    '''
+    N_A_true = 1e4
+    popt = [1.880, 0.0724, 1.764, 0.930, 0.363, 0.112]
+    nu1F, nu2B, nu2F, m, Tp, T = popt
+    # convert the parameters to be in physical scales
+    N_YRI_true = N_A_true * nu1F
+    N_CEU_initial_true = N_A_true * nu2B
+    N_CEU_final_true = N_A_true * nu2F
+    m_true = m / (2 * N_A_true)
+    Tp_true = Tp / (2 * N_A_true) # time between Nanc growth and split
+    T_true = T / (2 * N_A_true) # time between split and present
+    params_default = {
+        "samples": {"YRI":10, "CEU":10},
+        "N_A_true": N_A_true,
+        "N_YRI_true": N_YRI_true,
+        "N_CEU_initial_true": N_CEU_initial_true,
+        "N_CEU_final_true": N_CEU_final_true,
+        "m_true": m_true,
+        "Tp_true": Tp_true,
+        "T_true": T_true,
+        "N_A_low": 1e2,
+        "N_A_high": 1e5,
+        "N_YRI_low": 1e2,
+        "N_YRI_high": 1e5,
+        "N_CEU_initial_low": 1e2,
+        "N_CEU_initial_high": 1e5,
+        "N_CEU_final_low": 1e2,
+        "N_CEU_final_high": 1e5,
+        "m_low": 0,
+        "m_high": 0.01,
+        "Tp_low": 0,
+        "Tp_high": 3e4,
+        "T_low": 0,
+        "T_high": 3e4,
+        "contig_length": 1e6,
+        "u": 1.5e-8, # mutation rate
+        "r": 1.5e-8, # recombination rate
+    }
+    def __init__(self,snakemake):
+        super().__init__(snakemake, YRI_CEU_simulator.params_default)
+        self.true_values = {"N_A": self.N_A_true, "N_YRI": self.N_YRI_true, "N_CEU_initial": self.N_CEU_initial_true, "N_CEU_final": self.N_CEU_final_true, "m": self.m_true, "Tp": self.Tp_true, "T": self.T_true}
+        self.bounds = {"N_A": (self.N_A_low, self.N_A_high), "N_YRI": (self.N_YRI_low, self.N_YRI_high), "N_CEU_initial": (self.N_CEU_initial_low, self.N_CEU_initial_high), "N_CEU_final": (self.N_CEU_final_low, self.N_CEU_final_high), "m": (self.m_low, self.m_high), "Tp": (self.Tp_low, self.Tp_high), "T": (self.T_low, self.T_high)}
+        low = [self.bounds[p][0] for p in self.bounds.keys()]
+        high = [self.bounds[p][1] for p in self.bounds.keys()]
+        self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
+    def __call__(self, theta):
+        if type(theta) is torch.Tensor:
+            N_A, N_YRI, N_CEU_initial, N_CEU_final, m, Tp, T = theta.squeeze().cpu().tolist()
+        else:
+            N_A, N_YRI, N_CEU_initial, N_CEU_final, m, Tp, T = theta
+        import demes
+        import msprime
+
+        b = demes.Builder()
+        b.add_deme("ancestral", epochs=[dict(start_size=N_A, end_time=Tp+T)])
+        b.add_deme("AMH", ancestors=["ancestral"], epochs=[dict(start_size=N_YRI, end_time=T)])
+        b.add_deme("CEU", ancestors=["AMH"], epochs=[dict(start_size=N_CEU_initial, end_size=N_CEU_final)])
+        b.add_deme("YRI", ancestors=["AMH"], epochs=[dict(start_size=N_YRI)])
+        b.add_migration(demes=["CEU", "YRI"], rate=m)
+        g = b.resolve()
+        demog = msprime.Demography.from_demes(g)
+        ts = msprime.sim_ancestry(
+            self.samples,
+            demography=demog,
+            sequence_length=self.contig_length,
+            recombination_rate=self.r
+            )
+        ts = msprime.sim_mutations(ts, rate=self.u)
+        return ts
 
 class HomSap_ooa_archaic_simulator(BaseSimulator):
     '''
@@ -565,6 +640,7 @@ class PonAbe_IM_msprime_simulator(BaseSimulator):
 MODEL_LIST = {
     "AraTha_2epoch": AraTha_2epoch_simulator,
     "AraTha_2epoch_genetic_map": AraTha_2epoch_genetic_map_simulator,
+    "YRI_CEU": YRI_CEU_simulator,
     "HomSap_ooa_archaic_simulator": HomSap_ooa_archaic_simulator,
     "HomSap_2epoch": HomSap_Africa_1b08_simulator,
     "gammaDFE_cnst_N": gammaDFE_cnst_N_simulator,
