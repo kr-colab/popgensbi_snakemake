@@ -264,11 +264,12 @@ class moments_LD_stats(BaseProcessor):
         pos_bins = np.logspace(1, np.log10(ts.sequence_length) - 1, num=self.n_bins, base=10)
         n = 0
 
-
+        # using dinf's misc function, ts_individuals, to check which populations have sampled individuals
+        from dinf.misc import ts_individuals
         num_sampled_populations = 0
         sampled_pop_ids = []
         for pop in ts.populations():
-            if pop.metadata['sampling_time'] is not None:
+            if len(ts_individuals(ts, pop.metadata['name']) > 0):
                 num_sampled_populations += 1
                 sampled_pop_ids.append(pop.id)
         output = np.zeros((len(pos_bins)-1) * 8 * (num_sampled_populations + num_sampled_populations * (num_sampled_populations - 1) // 2))
