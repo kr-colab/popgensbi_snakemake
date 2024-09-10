@@ -3,13 +3,12 @@ import os
 import pickle
 
 from embedding_networks import *
-from sbi.neural_nets.embedding_nets import *
 from ts_simulators import *
 import numpy as np
 import torch
-from sbi.inference import SNPE
+from sbi.inference import NPE
 from sbi.inference.posteriors import DirectPosterior
-from sbi.utils import posterior_nn
+from sbi.neural_nets import posterior_nn
 from natsort import natsorted
 from torch.utils.tensorboard import SummaryWriter
 
@@ -58,8 +57,10 @@ if snakemake.params.embedding_net == "ExchangeableCNN":
     else:
         embedding_net = ExchangeableCNN().to(device)
 elif snakemake.params.embedding_net == "MLP":
+    from sbi.neural_nets.embedding_nets import FCEmbedding
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).to(device)
 elif snakemake.params.embedding_net == "CNN":
+    from sbi.neural_nets.embedding_nets import CNNEmbedding
     embedding_net = CNNEmbedding(input_shape=xs.shape[1:]).to(device)
 elif snakemake.params.embedding_net =="Identity":
     embedding_net = torch.nn.Identity().to(device)
@@ -72,7 +73,7 @@ normalizing_flow_density_estimator = posterior_nn(
 # get the log directory for tensorboard summary writer
 log_dir = os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", "sbi_logs", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
-inference = SNPE(
+inference = NPE(
     prior=prior,
     density_estimator=normalizing_flow_density_estimator,
     device=device.type,

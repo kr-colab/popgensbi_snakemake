@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from torch import nn
-from sbi.neural_nets.embedding_nets import *
 
 class SymmetricLayer(nn.Module):
     """
