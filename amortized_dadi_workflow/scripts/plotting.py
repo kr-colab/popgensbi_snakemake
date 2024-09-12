@@ -20,7 +20,7 @@ with open(f"{posteriordir}/sim_round_{sim_rounds}/ensemble_posterior.pkl", "rb")
 
 fs_star = np.load(os.path.join(datadir, "fs_star.npy"))
 fs_star = torch.from_numpy(fs_star.reshape(1, *fs_star.shape))
-samples = posterior.sample((100_000,), x=fs_star.cuda(), show_progress_bars=True).cpu().numpy()
+samples = posterior.sample((100_000,), x=fs_star, show_progress_bars=True).cpu().numpy()
 np.save(f"{posteriordir}/sim_round_{sim_rounds}/default_obs_samples.npy", samples)
 
 # find MAP parameters

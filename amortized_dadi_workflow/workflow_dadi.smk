@@ -69,9 +69,7 @@ rule train_npe:
     log:
         "logs/train_npe_round_{k}_rep_{e}.log"
     resources:
-        mem_mb="20000",
-        slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        mem_mb="20000"
     params:
         sim_rounds="{k}",
         ensemble="{e}",
@@ -88,9 +86,7 @@ rule posterior_ensemble:
     log:
         "logs/posterior_ensemble_round_{k}.log"
     resources:
-        mem_mb="32000",
-        slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        mem_mb="32000"
     params:
         sim_rounds="{k}",
         **{k: v for k, v in config.items()}
@@ -109,9 +105,7 @@ rule plot_posterior:
 
     log: "logs/plot_posterior_round_{k}.log"
     resources:
-        mem_mb="5000",
-        slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        mem_mb="5000"
     params:
         sim_rounds=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}
