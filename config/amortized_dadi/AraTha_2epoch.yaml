@@ -1,5 +1,5 @@
-n_sims_per_round : 1000
-n_rounds : 10
+n_sims_per_round : 250
+n_rounds : 40
 datadir: "results/amortized_dadi/AraTha_2epoch/data/"
 posteriordir: "results/amortized_dadi/AraTha_2epoch/posterior/"
 demog_model: "AraTha_2epoch"
