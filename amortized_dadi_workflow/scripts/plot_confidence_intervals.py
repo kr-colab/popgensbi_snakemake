@@ -8,9 +8,8 @@ datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
 n_trains = snakemake.params.n_trains
 max_n_train = snakemake.params.max_n_train
-confidence_intervals = []
 for j, n_train in enumerate(n_trains):
-    posterior_samples = np.load(f"{posteriordir}/n_train_{n_train}/default_obs_samples.npy")
+    posterior_samples = np.load(os.path.join(posteriordir, f"n_train_{int(float(n_train))}", "default_obs_samples.npy"))
     widths = []
     for i, param_samples in enumerate(posterior_samples.T):
         lower_bound = np.quantile(param_samples, 0.025)
@@ -22,7 +21,6 @@ for j, n_train in enumerate(n_trains):
         confidence_intervals = widths
     else:
         confidence_intervals = np.vstack((confidence_intervals, widths))
-    confidence_intervals.append(np.array(widths))
 np.save(f"{posteriordir}n_train_{max_n_train}/confidence_intervals.npy", confidence_intervals)
 
 
