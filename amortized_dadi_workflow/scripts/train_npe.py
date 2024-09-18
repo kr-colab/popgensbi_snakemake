@@ -1,4 +1,3 @@
-import glob
 import os
 import pickle
 
@@ -12,15 +11,12 @@ from natsort import natsorted
 from torch.utils.tensorboard import SummaryWriter
 
 def load_data_files(data_dir, n_train):
+    n_train = int(n_train)
     xs = []
     thetas = []
-    x_files_all = glob.glob(os.path.join(data_dir, "fs_*.npy"))
-    x_files = natsorted(x_files_all)[:n_train]
-    for xf in x_files:
-        xs.append(np.load(xf))
-        var = os.path.basename(xf)[3:-4]
-        thetas.append(np.load(os.path.join(data_dir, f"theta_{var}.npy")))
-
+    for n in range(n_train):
+        xs.append(np.load(os.path.join(data_dir, f"fs_{n}.npy")))
+        thetas.append(np.load(os.path.join(data_dir, f"theta_{n}.npy")))
     xs = torch.from_numpy(np.array(xs)).to(torch.float32)
     thetas = torch.from_numpy(np.array(thetas)).to(torch.float32)
     return thetas, xs
@@ -30,6 +26,8 @@ posteriordir = snakemake.params.posteriordir
 n_train = snakemake.params.n_train
 ensemble = snakemake.params.ensemble
 embedding_net = snakemake.params.embedding_net
+
+print(n_train)
 
 if not os.path.isdir(posteriordir):
     os.mkdir(posteriordir)
