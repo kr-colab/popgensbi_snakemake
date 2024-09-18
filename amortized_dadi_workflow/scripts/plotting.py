@@ -46,4 +46,4 @@ _ = analysis.pairplot(samples,
         figsize=(10, 10),
         points=[list(theta_star.values()), list(map_thetas)],
         points_colors=["y", "r"])
-plt.savefig(f"{posteriordir}/train_n_{train_n}/default_obs_corner.png")
+plt.savefig(f"{posteriordir}/n_train_{n_train}/default_obs_corner.png")
