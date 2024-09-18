@@ -5,9 +5,9 @@ import pickle
 from dadi_simulators import *
 import numpy as np
 import torch
-from sbi.inference import NPE
+from sbi.inference import SNPE
 from sbi.inference.posteriors import DirectPosterior
-from sbi.neural_nets import posterior_nn
+from sbi.utils import posterior_nn
 from natsort import natsorted
 from torch.utils.tensorboard import SummaryWriter
 
@@ -65,7 +65,7 @@ normalizing_flow_density_estimator = posterior_nn(
 log_dir = os.path.join(posteriordir, "sbi_logs", f"sim_round_{sim_rounds}", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
 
-inference = NPE(
+inference = SNPE(
     prior=prior, 
     density_estimator=normalizing_flow_density_estimator, 
     show_progress_bars=True, 

@@ -6,9 +6,9 @@ from embedding_networks import *
 from ts_simulators import *
 import numpy as np
 import torch
-from sbi.inference import NPE
+from sbi.inference import SNPE
 from sbi.inference.posteriors import DirectPosterior
-from sbi.neural_nets import posterior_nn
+from sbi.utils import posterior_nn
 from natsort import natsorted
 from torch.utils.tensorboard import SummaryWriter
 
@@ -73,7 +73,7 @@ normalizing_flow_density_estimator = posterior_nn(
 # get the log directory for tensorboard summary writer
 log_dir = os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", "sbi_logs", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
-inference = NPE(
+inference = SNPE(
     prior=prior,
     density_estimator=normalizing_flow_density_estimator,
     device=device.type,

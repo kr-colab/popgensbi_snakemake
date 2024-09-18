@@ -1,7 +1,7 @@
 import glob
 import os
 import pickle
-from sbi.inference.posteriors.ensemble_posterior import EnsemblePosterior
+from sbi.utils.posterior_ensemble import NeuralPosteriorEnsemble
 import torch
 import numpy as np
 
@@ -16,7 +16,8 @@ for pf in posterior_files:
         posteriors.append(pickle.load(f))
 
 device = posteriors[-1]._device
-ensemble = EnsemblePosterior(posteriors)
+weights = 1.0 / len(posteriors) * torch.ones(len(posteriors)).to(device)
+ensemble = NeuralPosteriorEnsemble(posteriors, weights=weights)
 
 with open(f"{posteriordir}/{ts_processor}/sim_round_{sim_rounds}/ensemble_posterior.pkl", "wb") as f:
     pickle.dump(ensemble, f)
