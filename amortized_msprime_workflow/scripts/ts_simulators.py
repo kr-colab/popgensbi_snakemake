@@ -135,7 +135,7 @@ class YRI_CEU_simulator(BaseSimulator):
         "Tp_high": 3e4,
         "T_low": 0,
         "T_high": 3e4,
-        "contig_length": 1e6,
+        "contig_length": 10e6,
         "u": 1.5e-8, # mutation rate
         "r": 1.5e-8, # recombination rate
     }
