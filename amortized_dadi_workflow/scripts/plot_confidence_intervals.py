@@ -21,7 +21,7 @@ for j, n_train in enumerate(n_trains):
         confidence_intervals = widths
     else:
         confidence_intervals = np.vstack((confidence_intervals, widths))
-np.save(f"{posteriordir}n_train_{max_n_train}/confidence_intervals.npy", confidence_intervals)
+np.save(f"{posteriordir}confidence_intervals.npy", confidence_intervals)
 
 
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
@@ -34,4 +34,4 @@ for i, param_samples in enumerate(posterior_samples.T):
 plt.legend()
 plt.xlabel("# training data")
 plt.ylabel("Confidence Interval Width / Parameter Range")
-plt.savefig(f"{posteriordir}n_train_{max_n_train}/confidence_intervals.png")
+plt.savefig(f"{posteriordir}confidence_intervals.png")

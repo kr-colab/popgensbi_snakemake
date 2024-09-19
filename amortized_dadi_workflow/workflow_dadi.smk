@@ -23,8 +23,8 @@ rule all:
         expand(os.path.join(posteriordir, "n_train_{k}", "ensemble_posterior.pkl"), k=list(n_trains)),
         expand(os.path.join(posteriordir, "n_train_{k}", "default_obs_samples.npy"), k=list(n_trains)),
         expand(os.path.join(posteriordir, "n_train_{k}", "default_obs_corner.png"), k=list(n_trains)),
-        os.path.join(posteriordir, "n_train_{}", "confidence_intervals.png").format(max_n_train),
-        os.path.join(posteriordir, "n_train_{}", "confidence_intervals.npy").format(max_n_train),
+        os.path.join(posteriordir, "confidence_intervals.png"),
+        os.path.join(posteriordir, "confidence_intervals.npy"),
         expand(os.path.join(posteriordir, "n_train_{k}/", "2d_comp_multinom.png"), k=list(n_trains)),
         expand(os.path.join(posteriordir, "n_train_{k}/", "map_thetas.npy"), k=list(n_trains)),
         expand(os.path.join(posteriordir, "n_train_{k}/", "model_fs.npy"), k=list(n_trains))
@@ -113,14 +113,14 @@ rule plot_posterior:
     script: "scripts/plotting.py"
 
 rule plot_ci:
-    message: "plotting confidence intervals with training data set size {max_n_train}..."
+    message: "plotting confidence intervals with training dataset sizes {n_trains}..."
     input:
         expand(os.path.join(posteriordir, "n_train_{n}/", "default_obs_samples.npy"), n=n_trains)
     output:
-        ci_npy = os.path.join(posteriordir, "n_train_{max_n_train}/", "confidence_intervals.npy"),
-        ci_png = os.path.join(posteriordir, "n_train_{max_n_train}/", "confidence_intervals.png")
+        ci_npy = os.path.join(posteriordir, "confidence_intervals.npy"),
+        ci_png = os.path.join(posteriordir, "confidence_intervals.png")
     params:
-        max_n_train = lambda wildcards: wildcards.max_n_train,
+        max_n_train="{max_n_train}",
         **{k: v for k, v in config.items()}
     script: "scripts/plot_confidence_intervals.py"
 
