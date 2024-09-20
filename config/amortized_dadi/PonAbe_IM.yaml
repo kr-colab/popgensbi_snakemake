@@ -1,6 +1,6 @@
 # config file for workflow dadi for IM model of PonAbe
-n_sims_per_round : 1000
-n_rounds : 20
+n_sims : 1000
+n_trains: [1e2, 3e2, 1e3]
 datadir: "results/PonAbe_IM/data/"
 posteriordir: "results/PonAbe_IM/posterior/"
 demog_model: "PonAbe_IM"

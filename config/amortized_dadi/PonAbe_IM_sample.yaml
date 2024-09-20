@@ -1,8 +1,0 @@
-# config file for workflow dadi for IM model of PonAbe, Poisson sample from the expected jsfs to add noise
-n_sims_per_round : 1000
-n_rounds : 20
-datadir: "results/PonAbe_IM_sample/data/"
-posteriordir: "results/PonAbe_IM_sample/posterior/"
-demog_model: "PonAbe_IM_sample"
-embedding_net: "CNN"
-n_ensemble: 10
