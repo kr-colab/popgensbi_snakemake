@@ -100,62 +100,62 @@ class YRI_CEU_simulator(BaseSimulator):
     simulate a custom model as defined in dadi's manual (https://dadi.readthedocs.io/en/latest/examples/YRI_CEU/YRI_CEU/).
     Ancetral population grows, split, and CEU population undergoes a bottleneck upon splitting and then grows exponentially. 
     There is a continuous migration between YRI and CEU.
-    Set ancestral population size to 1e4 and use optimal parameter values reported in the example. 
+    Set ancestral population size to be constant (1e4) and use optimal parameter values reported in the example. 
     '''
-    N_A_true = 1e4
+    N_A = 1e4
     popt = [1.880, 0.0724, 1.764, 0.930, 0.363, 0.112]
-    nu1F, nu2B, nu2F, m, Tp, T = popt
-    # convert the parameters to be in physical scales
-    N_YRI_true = N_A_true * nu1F
-    N_CEU_initial_true = N_A_true * nu2B
-    N_CEU_final_true = N_A_true * nu2F
-    m_true = m / (2 * N_A_true)
-    Tp_true = Tp / (2 * N_A_true) # time between Nanc growth and split
-    T_true = T / (2 * N_A_true) # time between split and present
+    nu1F_true, nu2B_true, nu2F_true, m_true, Tp_true, T_true = popt
     params_default = {
         "samples": {"YRI":10, "CEU":10},
-        "N_A_true": N_A_true,
-        "N_YRI_true": N_YRI_true,
-        "N_CEU_initial_true": N_CEU_initial_true,
-        "N_CEU_final_true": N_CEU_final_true,
+        "N_A": N_A,
+        "nu1F_true": nu1F_true,
+        "nu2B_true": nu2B_true,
+        "nu2F_true": nu2F_true,
         "m_true": m_true,
         "Tp_true": Tp_true,
         "T_true": T_true,
-        "N_A_low": 1e2,
-        "N_A_high": 1e5,
-        "N_YRI_low": 1e2,
-        "N_YRI_high": 1e5,
-        "N_CEU_initial_low": 1e2,
-        "N_CEU_initial_high": 1e5,
-        "N_CEU_final_low": 1e2,
-        "N_CEU_final_high": 1e5,
+        "nu1F_low": 1e-2,
+        "nu1F_high": 10,
+        "nu2B_low": 1e-2,
+        "nu2B_high": 10,
+        "nu2F_low": 1e-2,
+        "nu2F_high": 10,
         "m_low": 0,
-        "m_high": 0.01,
+        "m_high": 10,
         "Tp_low": 0,
-        "Tp_high": 3e4,
+        "Tp_high": 3,
         "T_low": 0,
-        "T_high": 3e4,
+        "T_high": 3,
         "contig_length": 10e6,
         "u": 1.5e-8, # mutation rate
         "r": 1.5e-8, # recombination rate
     }
     def __init__(self,snakemake):
         super().__init__(snakemake, YRI_CEU_simulator.params_default)
-        self.true_values = {"N_A": self.N_A_true, "N_YRI": self.N_YRI_true, "N_CEU_initial": self.N_CEU_initial_true, "N_CEU_final": self.N_CEU_final_true, "m": self.m_true, "Tp": self.Tp_true, "T": self.T_true}
-        self.bounds = {"N_A": (self.N_A_low, self.N_A_high), "N_YRI": (self.N_YRI_low, self.N_YRI_high), "N_CEU_initial": (self.N_CEU_initial_low, self.N_CEU_initial_high), "N_CEU_final": (self.N_CEU_final_low, self.N_CEU_final_high), "m": (self.m_low, self.m_high), "Tp": (self.Tp_low, self.Tp_high), "T": (self.T_low, self.T_high)}
-        low = [self.bounds[p][0] for p in self.bounds.keys()]
-        high = [self.bounds[p][1] for p in self.bounds.keys()]
+        self.true_values = {"nu1F": self.nu1F_true, "nu2B": self.nu2B_true, "nu2F": self.nu2F_true, "m": self.m_true, "Tp": self.Tp_true, "T": self.T_true}
+        self.bounds = {"nu1F": (self.nu1F_low, self.nu1F_high), "nu2B": (self.nu2B_low, self.nu2B_high), "nu2F": (self.nu2F_low, self.nu2F_high), "m": (self.m_low, self.m_high), "Tp": (self.Tp_low, self.Tp_high), "T": (self.T_low, self.T_high)}
+        low = [self.bounds[key][0] for key in self.bounds.keys()]
+        high = [self.bounds[key][1] for key in self.bounds.keys()]
         self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
     def __call__(self, theta):
         if type(theta) is torch.Tensor:
-            N_A, N_YRI, N_CEU_initial, N_CEU_final, m, Tp, T = theta.squeeze().cpu().tolist()
+            nu1F, nu2B, nu2F, m, Tp, T = theta.squeeze().cpu().tolist()
         else:
-            N_A, N_YRI, N_CEU_initial, N_CEU_final, m, Tp, T = theta
+            nu1F, nu2B, nu2F, m, Tp, T = theta
         import demes
         import msprime
 
+        # rescale parameters that were normalized by ancestral population size back to physical scales for demes
+        N_YRI = self.N_A * nu1F
+        N_CEU_initial = self.N_A * nu2B
+        N_CEU_final = self.N_A * nu2F
+        m = m / (2 * self.N_A)
+        Tp = Tp / (2 * self.N_A) # time between Nanc growth and split
+        T = T / (2 * self.N_A) # time between split and present
+
+
         b = demes.Builder()
-        b.add_deme("ancestral", epochs=[dict(start_size=N_A, end_time=Tp+T)])
+        b.add_deme("ancestral", epochs=[dict(start_size=self.N_A, end_time=Tp+T)])
         b.add_deme("AMH", ancestors=["ancestral"], epochs=[dict(start_size=N_YRI, end_time=T)])
         b.add_deme("CEU", ancestors=["AMH"], epochs=[dict(start_size=N_CEU_initial, end_size=N_CEU_final)])
         b.add_deme("YRI", ancestors=["AMH"], epochs=[dict(start_size=N_YRI)])
