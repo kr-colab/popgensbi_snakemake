@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/AraTha_2epoch_sfs.yaml"
+configfile: "config/amortized_msprime/YRI_CEU_moments.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -26,8 +26,8 @@ rule all:
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "ensemble_posterior.pkl"), k=n_trains),
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "default_obs_samples.npy"), k=n_trains),
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "default_obs_corner.png"), k=n_trains),
-        os.path.join(posteriordir, ts_processor, "n_train_{}", "confidence_intervals.png").format(max_n_train),
-        os.path.join(posteriordir, ts_processor, "n_train_{}", "confidence_intervals.npy").format(max_n_train)
+        os.path.join(posteriordir, ts_processor, "confidence_intervals.png"),
+        os.path.join(posteriordir, ts_processor, "confidence_intervals.npy")
 
 
 rule simulate_default_ts:
@@ -149,8 +149,8 @@ rule plot_ci:
     input:
         expand(os.path.join(posteriordir, ts_processor, "n_train_{n}", "default_obs_samples.npy"), n=n_trains)
     output:
-        os.path.join(posteriordir, ts_processor, "n_train_{max_n_train}", "confidence_intervals.npy"),
-        os.path.join(posteriordir, ts_processor, "n_train_{max_n_train}", "confidence_intervals.png")
+        os.path.join(posteriordir, ts_processor, "confidence_intervals.npy"),
+        os.path.join(posteriordir, ts_processor, "confidence_intervals.png")
     params:
         max_n_train="{max_n_train}",
         **{k: v for k, v in config.items()}
