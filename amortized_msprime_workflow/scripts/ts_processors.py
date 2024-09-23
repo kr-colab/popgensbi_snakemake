@@ -198,7 +198,7 @@ class tskit_jsfs(BaseProcessor):
         super().__init__(snakemake, tskit_sfs.params_default)
     def __call__(self, ts):
         sfs = ts.allele_frequency_spectrum(
-            sample_sets = [ts.samples(population=0), ts.samples(population=1)], 
+            sample_sets = [ts.samples(population=i) for i in range(ts.num_populations) if len(ts.samples(population=i))>0], 
             windows = self.windows, 
             mode = self.mode, 
             span_normalise = self.span_normalise, 
