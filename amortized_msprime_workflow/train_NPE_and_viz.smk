@@ -91,7 +91,6 @@ rule plot_ci:
         os.path.join(posteriordir, ts_processor, "confidence_intervals.npy"),
         os.path.join(posteriordir, ts_processor, "confidence_intervals.png")
     params:
-        max_n_train="{max_n_train}",
         **{k: v for k, v in config.items()}
     script: "scripts/plot_confidence_intervals.py"
 
