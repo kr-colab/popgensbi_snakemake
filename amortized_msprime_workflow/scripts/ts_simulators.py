@@ -150,8 +150,8 @@ class YRI_CEU_simulator(BaseSimulator):
         N_CEU_initial = self.N_A * nu2B
         N_CEU_final = self.N_A * nu2F
         m = m / (2 * self.N_A)
-        Tp = Tp / (2 * self.N_A) # time between Nanc growth and split
-        T = T / (2 * self.N_A) # time between split and present
+        Tp = Tp * (2 * self.N_A) # time between Nanc growth and split
+        T = T * (2 * self.N_A) # time between split and present
 
 
         b = demes.Builder()
