@@ -7,8 +7,8 @@ import os
 # Set up config
 configfile: "config/amortized_msprime/YRI_CEU_moments.yaml"
 
-n_sims_start = 0 # which index to start with (in case some training data still exists.)
-n_sims = config["n_sims"] # total number of simulations (i.e. n_sims - 1 is the highest index)
+n_sims_start = 1000 # which index to start with (in case some training data still exists.)
+n_sims = 30000 # total number of simulations (i.e. n_sims - 1 is the highest index)
 datadir = config["datadir"] # directory for training data
 ts_processor = config["ts_processor"] # name of the ts processor used
 
