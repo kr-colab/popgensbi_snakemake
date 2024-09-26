@@ -3,7 +3,7 @@ posteriordir: "results/amortized_msprime/YRI_CEU/posterior/"
 demog_model: "YRI_CEU"
 ts_processor: "dinf_multiple_pops"
 embedding_net: "ExchangeableCNN"
-n_sims_per_round : 100
-n_rounds : 1
+n_sims : 10000
+n_trains : [1e3, 3e3, 1e4]
 n_snps : 20000
-n_ensemble: 2 # number of ensemble members
+n_ensemble: 10 # number of ensemble members
