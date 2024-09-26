@@ -377,6 +377,65 @@ class moments_LD_stats(BaseProcessor):
         output /= self.n_avg
         return torch.from_numpy(output).float()
 
+class moments_LD_stats2(BaseProcessor):
+    '''
+    second version of LD stats processor. Uses moments.LD.Parsing.compute_ld_statistics
+    '''
+    params_default = {
+        "rec_map_file":"rec_map_file.txt",
+        "pop_file":"pop_file.txt",
+        "pops":["deme0, deme1"],
+        "r_bins":[0, 1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3],
+        "n_segs":100,
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, moments_LD_stats2.params_default)
+        self.datadir = snakemake.params.datadir
+        self.ts_processor = snakemake.params.ts_processor
+        self.randn = np.random.randint(0, 10000)
+
+    def __call__(self, ts):
+        import moments
+        import os
+        # get the length of each segment
+        seg_len = int(ts.sequence_length / self.n_segs)
+        ld_stats = {}
+        for i in range(self.n_segs):
+            vcf_name = os.path.join(self.datadir, self.ts_processor, "{0}_seg_{1}.vcf".format(self.randn, i))
+            site_mask = np.ones(ts.num_sites, dtype=bool)
+            # unmask segments we want
+            for site in ts.sites():
+                if site.position > i * seg_len:
+                    if site.position < (i + 1) * seg_len:
+                        site_mask[site.id] = 0
+            with open(vcf_name, "w+") as fout:
+                ts.write_vcf(fout, site_mask=site_mask)
+            os.system(f"gzip {vcf_name}")
+            ld_stats[i] = moments.LD.Parsing.compute_ld_statistics(
+                str(vcf_name)+'.gz',
+                rec_map_file=os.path.join(self.datadir, self.rec_map_file),
+                pop_file=os.path.join(self.datadir, self.pop_file),
+                pops=self.pops,
+                r_bins=self.r_bins,
+                report=False)
+            os.system("rm " + str(vcf_name)+'.gz')
+            os.system("rm " + str(vcf_name)[:-3] + "h5")
+        mv = moments.LD.Parsing.bootstrap_data(ld_stats)
+        output = []
+        for i in range(len(mv["means"])):
+            elems = mv["means"][i].flatten()
+            for j in range(len(elems)):
+                output.append(elems[j])
+        for i in range(len(mv["varcovs"])):
+            elems = mv["varcovs"][i].flatten()
+            for j in range(len(elems)):
+                output.append(elems[j])
+        output = np.array(output)
+        return torch.from_numpy(output).float()
+        
+
+
+
 PROCESSOR_LIST = {
     "dinf": dinf_extract,
     "dinf_multiple_pops": dinf_extract_multiple_pops,
@@ -384,5 +443,6 @@ PROCESSOR_LIST = {
     "tskit_sfs": tskit_sfs,
     "tskit_jsfs": tskit_jsfs,
     "tskit_sfs_selection": tskit_sfs_selection, 
-    "moments_LD_stats": moments_LD_stats
+    "moments_LD_stats": moments_LD_stats,
+    "moments_LD_stats2": moments_LD_stats2
 }
