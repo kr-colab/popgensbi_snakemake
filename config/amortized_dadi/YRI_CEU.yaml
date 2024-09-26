@@ -1,0 +1,7 @@
+n_sims : 1000
+n_trains : [1e2, 3e2, 1e3]
+datadir: "results/amortized_dadi/YRI_CEU/data/"
+posteriordir: "results/amortized_dadi/YRI_CEU/posterior/"
+demog_model: "YRI_CEU"
+embedding_net: "CNN"
+n_ensemble: 10
