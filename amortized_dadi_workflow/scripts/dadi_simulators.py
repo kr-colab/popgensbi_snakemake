@@ -130,7 +130,7 @@ class YRI_CEU_simulator(BaseSimulator):
     Downsample simulated fs using the number of segregating sites
     '''
     params_default = {
-        "ns": (20, 24), # sample size
+        "ns": (20, 20), # sample size
         "pts": 100,
         "nu1F_true": 1.880,
         "nu2B_true": 0.0724,
@@ -139,11 +139,11 @@ class YRI_CEU_simulator(BaseSimulator):
         "Tp_true": 0.363,
         "T_true": 0.112,
         "nu1F_low": 1e-2,
-        "nu1F_high": 100,
+        "nu1F_high": 10,
         "nu2B_low": 1e-2,
-        "nu2B_high": 100,
+        "nu2B_high": 10,
         "nu2F_low": 1e-2,
-        "nu2F_high": 100,
+        "nu2F_high": 10,
         "m_low": 0,
         "m_high": 10,
         "Tp_low": 0,
