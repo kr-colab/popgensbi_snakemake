@@ -5,7 +5,7 @@ ts_processor: "dinf"
 n_snps: 20000
 maf_thresh: 0.1
 embedding_net: "ExchangeableCNN"
-n_sims_per_round : 1000
-n_rounds : 20
+n_sims : 20000
+n_trains : [1e3, 3e3, 1e4, 2e4]
 n_ensemble: 10 # number of ensemble members
 device: "cpu"

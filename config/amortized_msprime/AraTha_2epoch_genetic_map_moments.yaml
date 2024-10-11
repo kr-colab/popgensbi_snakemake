@@ -3,6 +3,6 @@ posteriordir: "results/amortized_msprime/AraTha_2epoch_genetic_map/posterior/"
 demog_model: "AraTha_2epoch_genetic_map"
 ts_processor: "moments_LD_stats"
 embedding_net: "MLP"
-n_sims_per_round : 1000
-n_rounds : 20
+n_sims : 20000
+n_trains : [1e3, 3e3, 1e4, 2e4]
 n_ensemble: 10 # number of ensemble members

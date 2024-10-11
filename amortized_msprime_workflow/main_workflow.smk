@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/YRI_CEU_moments.yaml"
+configfile: "config/amortized_msprime/AraTha_2epoch_genetic_map_sfs.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -12,11 +12,15 @@ max_n_train = n_trains[-1]
 datadir = config["datadir"] # directory for training data
 posteriordir = config["posteriordir"] # output directory for posterior
 ts_processor = config["ts_processor"] # name of the ts processor used
+n_rep = 1000 # number of replicate with true params value for coverage probability estimation
 
 rule all:
     input:
         os.path.join(datadir, "ts_star.trees"),
         os.path.join(datadir, ts_processor, "x_obs.npy"),
+        expand(os.path.join(datadir, "test_{r}.trees"), r=range(n_rep)),
+        expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep)),
+        expand(os.path.join(datadir, ts_processor, "test_x_{r}.npy"), r=range(n_rep)),
         expand(os.path.join(datadir, "{i}.trees"), i=range(n_sims)),
         expand(os.path.join(datadir, "theta_{i}.npy"), i=range(n_sims)),
         expand(os.path.join(datadir, ts_processor, "x_{i}.npy"), i=range(n_sims)),
@@ -27,7 +31,12 @@ rule all:
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "default_obs_samples.npy"), k=n_trains),
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "default_obs_corner.png"), k=n_trains),
         os.path.join(posteriordir, ts_processor, "confidence_intervals.png"),
-        os.path.join(posteriordir, ts_processor, "confidence_intervals.npy")
+        os.path.join(posteriordir, ts_processor, "confidence_intervals.npy"),
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "posterior_coverage.png"), k=n_trains),
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "observed_coverage.npy"), k=n_trains),
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "posterior_samples_test.npy"), k=n_trains),
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "ci_rank_param.png"), k=n_trains)
+
 
 
 rule simulate_default_ts:
@@ -56,6 +65,30 @@ rule process_default_ts:
     script:
         "scripts/process_default_ts.py"
 
+rule simulate_test_ts:
+    message:
+        "simulate {wildcards.r}-th ts for coverage test..."
+    output:
+        os.path.join(datadir, "test_{r}.trees"),
+        os.path.join(datadir, "test_theta_{r}.npy")
+    params:
+        num_simulations=lambda wildcards: wildcards.r,
+        **{k: v for k, v in config.items()}
+    script:
+        "scripts/simulate_test_ts.py"
+
+rule process_test_ts:
+    message:
+        "process {wildcards.r}-th ts for coverage test..."
+    input:
+        os.path.join(datadir, "test_{r}.trees")
+    output:
+        os.path.join(datadir, ts_processor, "test_x_{r}.npy")
+    params:
+        num_simulations=lambda wildcards: wildcards.r,
+        **{k: v for k, v in config.items()}
+    script:
+        "scripts/process_test_ts.py"
 
 rule simulate_ts:
     message:
@@ -154,5 +187,25 @@ rule plot_ci:
     params:
         **{k: v for k, v in config.items()}
     script: "scripts/plot_confidence_intervals.py"
+
+rule plot_coverage_prob:
+    message: "estimate coverage probability for posterior learned from {wildcards.k} sims"
+    input:
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "ensemble_posterior.pkl"),
+        expand(os.path.join(datadir, ts_processor, "test_x_{r}.npy"), r=range(n_rep)),
+        expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep))
+    output:
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "posterior_samples_test.npy"),
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "ci_rank_param.png"),
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "posterior_coverage.png"),
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "observed_coverage.npy")
+    resources:
+        slurm_partition="gpu",
+        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+    params:
+        n_train=lambda wildcards: wildcards.k,
+        **{k: v for k, v in config.items()}
+    script: "scripts/coverage_prob.py"
+
 
 
