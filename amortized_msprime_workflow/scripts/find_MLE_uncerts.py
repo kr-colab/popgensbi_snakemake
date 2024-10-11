@@ -38,7 +38,7 @@ def find_dadi_MLE(obs_sfs):
 import dadi.Godambe
 
 all_boot = []
-n_boot = 1000
+n_boot = int(snakemake.params.n_rep_dadi)
 for i in range(n_boot):
     fs_sample = np.load(os.path.join(datadir, f"test_{num_simulations}_sfs_rep_{i}.npy"))
     fs_sample = dadi.Spectrum(fs_sample)
@@ -47,13 +47,13 @@ for i in range(n_boot):
 # load test ts and use its sfs to find MLE
 ts_test = tskit.load(os.path.join(datadir, f"test_{num_simulations}.trees"))
 sfs_test = ts_test.allele_frequency_spectrum(
-            sample_sets = [ts.samples(population=i) for i in range(ts.num_populations) if len(ts.samples(population=i))>0], 
+            sample_sets = [ts_test.samples(population=i) for i in range(ts_test.num_populations) if len(ts_test.samples(population=i))>0], 
             windows = None, 
             mode = 'site', 
             span_normalise = False, 
             polarised = True)
 sfs_test = sfs_test / sum(sfs_test.flatten())
-
+sfs_test = dadi.Spectrum(sfs_test)
 MLE, ll = find_dadi_MLE(sfs_test)
 # Godambe analysis to get uncertainty. Use bigger epsilon because eps=0.01 seems to give a singular cov matrix
 uncerts, GIM, H = dadi.Godambe.GIM_uncert(func_ex, (pts,), all_boot,

@@ -44,6 +44,7 @@ rule find_MLE_uncerts:
         os.path.join(datadir, "test_uncerts_{r}.npy"),
         os.path.join(datadir, "test_GIM_{r}.npy")
     params:
+        n_rep_dadi=n_rep_dadi,
         num_simulations=lambda wildcards: wildcards.r,
         **{k: v for k, v in config.items()}
     script:
@@ -61,7 +62,7 @@ rule dadi_coverage_prob:
         os.path.join(datadir, "dadi_godambe_coverage.png"),
         os.path.join(datadir, "dadi_godambe_coverage.npy")
     params:
-        n_rep={n_rep},
+        n_rep=n_rep,
         **{k: v for k, v in config.items()}
     script:
         "scripts/dadi_coverage_prob.py"
