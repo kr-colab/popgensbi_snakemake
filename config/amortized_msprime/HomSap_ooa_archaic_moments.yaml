@@ -1,0 +1,8 @@
+datadir: "results/amortized_msprime/HomSap_ooa_archaic/data/"
+posteriordir: "results/amortized_msprime/HomSap_ooa_archaic/posterior/"
+demog_model: "HomSap_ooa_archaic_simulator"
+ts_processor: "moments_LD_stats"
+embedding_net: "MLP"
+n_sims_per_round : 1000
+n_rounds : 10
+n_ensemble: 1 # number of ensemble members

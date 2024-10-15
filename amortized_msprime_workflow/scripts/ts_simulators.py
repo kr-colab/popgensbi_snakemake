@@ -4,7 +4,8 @@ import stdpopsim
 import torch
 from sbi.utils import BoxUniform
 import numpy as np
-
+from zuko.distributions import Uniform, Joint, Sort
+from zuko.distributions import BoxUniform as BoxUniformZuko
 class BaseSimulator:
     def __init__(self, snakemake, params_default):
         for key, default in params_default.items():
@@ -92,6 +93,310 @@ class AraTha_2epoch_genetic_map_simulator(BaseSimulator):
         engine = stdpopsim.get_engine("msprime")
 
         ts = engine.simulate(model, contig, samples={"SouthMiddleAtlas": self.n_sample})
+
+        return ts
+class YRI_CEU_simulator(BaseSimulator):
+    '''
+    simulate a custom model as defined in dadi's manual (https://dadi.readthedocs.io/en/latest/examples/YRI_CEU/YRI_CEU/).
+    Ancetral population grows, split, and CEU population undergoes a bottleneck upon splitting and then grows exponentially. 
+    There is a continuous migration between YRI and CEU.
+    Set ancestral population size to be constant (1e4) and use optimal parameter values reported in the example. 
+    '''
+    N_A = 1e4
+    popt = [1.880, 0.0724, 1.764, 0.930, 0.363, 0.112]
+    nu1F_true, nu2B_true, nu2F_true, m_true, Tp_true, T_true = popt
+    params_default = {
+        "samples": {"YRI":10, "CEU":10},
+        "N_A": N_A,
+        "nu1F_true": nu1F_true,
+        "nu2B_true": nu2B_true,
+        "nu2F_true": nu2F_true,
+        "m_true": m_true,
+        "Tp_true": Tp_true,
+        "T_true": T_true,
+        "nu1F_low": 1e-2,
+        "nu1F_high": 10,
+        "nu2B_low": 1e-2,
+        "nu2B_high": 10,
+        "nu2F_low": 1e-2,
+        "nu2F_high": 10,
+        "m_low": 0,
+        "m_high": 10,
+        "Tp_low": 0,
+        "Tp_high": 3,
+        "T_low": 0,
+        "T_high": 3,
+        "contig_length": 10e6,
+        "u": 1.5e-8, # mutation rate
+        "r": 1.5e-8, # recombination rate
+    }
+    def __init__(self,snakemake):
+        super().__init__(snakemake, YRI_CEU_simulator.params_default)
+        self.true_values = {"nu1F": self.nu1F_true, "nu2B": self.nu2B_true, "nu2F": self.nu2F_true, "m": self.m_true, "Tp": self.Tp_true, "T": self.T_true}
+        self.bounds = {"nu1F": (self.nu1F_low, self.nu1F_high), "nu2B": (self.nu2B_low, self.nu2B_high), "nu2F": (self.nu2F_low, self.nu2F_high), "m": (self.m_low, self.m_high), "Tp": (self.Tp_low, self.Tp_high), "T": (self.T_low, self.T_high)}
+        low = [self.bounds[key][0] for key in self.bounds.keys()]
+        high = [self.bounds[key][1] for key in self.bounds.keys()]
+        self.prior = BoxUniform(low=torch.tensor(low), high=torch.tensor(high), device="cuda" if torch.cuda.is_available() else "cpu")
+    def __call__(self, theta):
+        if type(theta) is torch.Tensor:
+            nu1F, nu2B, nu2F, m, Tp, T = theta.squeeze().cpu().tolist()
+        else:
+            nu1F, nu2B, nu2F, m, Tp, T = theta
+        import demes
+        import msprime
+
+        # rescale parameters that were normalized by ancestral population size back to physical scales for demes
+        N_YRI = self.N_A * nu1F
+        N_CEU_initial = self.N_A * nu2B
+        N_CEU_final = self.N_A * nu2F
+        m = m / (2 * self.N_A)
+        Tp = Tp * (2 * self.N_A) # time between Nanc growth and split
+        T = T * (2 * self.N_A) # time between split and present
+
+
+        b = demes.Builder()
+        b.add_deme("ancestral", epochs=[dict(start_size=self.N_A, end_time=Tp+T)])
+        b.add_deme("AMH", ancestors=["ancestral"], epochs=[dict(start_size=N_YRI, end_time=T)])
+        b.add_deme("CEU", ancestors=["AMH"], epochs=[dict(start_size=N_CEU_initial, end_size=N_CEU_final)])
+        b.add_deme("YRI", ancestors=["AMH"], epochs=[dict(start_size=N_YRI)])
+        b.add_migration(demes=["CEU", "YRI"], rate=m)
+        g = b.resolve()
+        demog = msprime.Demography.from_demes(g)
+        ts = msprime.sim_ancestry(
+            self.samples,
+            demography=demog,
+            sequence_length=self.contig_length,
+            recombination_rate=self.r
+            )
+        ts = msprime.sim_mutations(ts, rate=self.u)
+        return ts
+
+class HomSap_ooa_archaic_simulator(BaseSimulator):
+    '''
+    simulate based on the OutOfAfricaArchaicAdmixture_5R19 model, perturbing inferred parameter values.
+    Note that the paramters are not normalized based on ancestral pop size.
+    '''
+    species = stdpopsim.get_species("HomSap")
+    model = species.get_demographic_model("OutOfAfricaArchaicAdmixture_5R19")
+    # extract true parameter values from the stdpopsim catalog model
+    N_A_true = model.populations[-1].initial_size
+    N_YRI_true = model.populations[0].initial_size
+    N_CEU_final = model.populations[1].initial_size
+    N_CHB_final = model.populations[2].initial_size
+    r_CEU_true = model.populations[1].growth_rate
+    r_CHB_true = model.populations[2].growth_rate
+    # OOA pop size is found from model.model.events
+    N_OOA_true = model.model.events[14].initial_size
+    # timing of each event, convert to yr by multiplying by generation time
+    T_arch_adm_end_true = model.model.events[0].time * model.generation_time
+    T_EU_AS_true = model.model.events[6].time * model.generation_time
+    T_B_true = model.model.events[15].time * model.generation_time
+    T_arch_afr_mig_true = model.model.events[19].time * model.generation_time
+    T_AF_true = model.model.events[20].time * model.generation_time
+    T_arch_afr_split_true = model.model.events[21].time * model.generation_time
+    T_nean_split_true = model.model.events[22].time * model.generation_time
+    # with T_EU_AS_true, we can get initial size of CEU and CHB
+    N_CEU_true = N_CEU_final * np.exp(-r_CEU_true * T_EU_AS_true / model.generation_time)
+    N_CHB_true = N_CHB_final * np.exp(-r_CHB_true * T_EU_AS_true / model.generation_time)
+    # migration rate of current populations can be found from migration matrix
+    m_YRI_CEU_true = model.model.migration_matrix[0, 1]
+    m_CEU_CHB_true = model.model.migration_matrix[1, 2]
+    # migration rates of archaic populations should be found from model.model.events (migration rate change events)
+    m_AF_arch_af_true = model.model.events[0].rate
+    m_OOA_nean_true = model.model.events[2].rate
+    m_AF_B_true = model.model.events[8].rate
+
+    params_default = {
+        "samples": {"YRI": 10, "CEU": 10, "CHB": 10},
+        "N_A_true": N_A_true,
+        "N_YRI_true": N_YRI_true,
+        "N_CEU_true": N_CEU_true,
+        "N_CHB_true": N_CHB_true,
+        "N_OOA_true": N_OOA_true,
+        "r_CEU_true": r_CEU_true,
+        "r_CHB_true": r_CHB_true,
+        "T_arch_adm_end_true": T_arch_adm_end_true,
+        "T_EU_AS_true": T_EU_AS_true,
+        "T_B_true": T_B_true,
+        "T_arch_afr_mig_true": T_arch_afr_mig_true,
+        "T_AF_true": T_AF_true,
+        "T_arch_afr_split_true": T_arch_afr_split_true,
+        "T_nean_split_true": T_nean_split_true,
+        "m_YRI_CEU_true": m_YRI_CEU_true,
+        "m_CEU_CHB_true": m_CEU_CHB_true,
+        "m_AF_arch_af_true": m_AF_arch_af_true,
+        "m_OOA_nean_true": m_OOA_nean_true,
+        "m_AF_B_true": m_AF_B_true,
+        "N_A_low": 100,
+        "N_A_high": 50_000,
+        "N_YRI_low": 100,
+        "N_YRI_high": 50_000,
+        "N_CEU_low": 100,
+        "N_CEU_high": 50_000,
+        "N_CHB_low": 100,
+        "N_CHB_high": 50_000,
+        "N_OOA_low": 100,
+        "N_OOA_high": 50_000,
+        "r_CEU_low": 0,
+        "r_CEU_high": 0.005,
+        "r_CHB_low": 0,
+        "r_CHB_high": 0.005,
+        "T_arch_adm_end_low": 10_000,
+        "T_arch_adm_end_high": 1_000_000,
+        "T_EU_AS_low": 10_000,
+        "T_EU_AS_high": 1_000_000,
+        "T_B_low": 10_000,
+        "T_B_high": 1_000_000,
+        "T_arch_afr_mig_low": 10_000,
+        "T_arch_afr_mig_high": 1_000_000,
+        "T_AF_low": 10_000,
+        "T_AF_high": 1_000_000,
+        "T_arch_afr_split_low": 10_000,
+        "T_arch_afr_split_high": 1_000_000,
+        "T_nean_split_low": 10_000,
+        "T_nean_split_high": 1_000_000,
+        "m_YRI_CEU_low": 0.0,
+        "m_YRI_CEU_high": 0.001,
+        "m_CEU_CHB_low": 0.0,
+        "m_CEU_CHB_high": 0.001,
+        "m_AF_arch_af_low": 0.0,
+        "m_AF_arch_af_high": 0.001,
+        "m_OOA_nean_low": 0.0,
+        "m_OOA_nean_high": 0.001,
+        "m_AF_B_low": 0.0,
+        "m_AF_B_high": 0.001,
+        "contig_length": 1e6,
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, HomSap_ooa_archaic_simulator.params_default)
+        self.true_values = {
+            "N_A": self.N_A_true,
+            "N_YRI": self.N_YRI_true,
+            "N_CEU": self.N_CEU_true,
+            "N_CHB": self.N_CHB_true,
+            "N_OOA": self.N_OOA_true,
+            "r_CEU": self.r_CEU_true,
+            "r_CHB": self.r_CHB_true,
+            "T_arch_adm_end": self.T_arch_adm_end_true,
+            "T_EU_AS": self.T_EU_AS_true,
+            "T_B": self.T_B_true,
+            "T_arch_afr_mig": self.T_arch_afr_mig_true,
+            "T_AF": self.T_AF_true,
+            "T_arch_afr_split": self.T_arch_afr_split_true,
+            "T_nean_split": self.T_nean_split_true,
+            "m_YRI_CEU": self.m_YRI_CEU_true,
+            "m_CEU_CHB": self.m_CEU_CHB_true,
+            "m_AF_arch_af": self.m_AF_arch_af_true,
+            "m_OOA_nean": self.m_OOA_nean_true,
+            "m_AF_B": self.m_AF_B_true,
+        }
+        self.bounds = {
+            "N_A": (self.N_A_low, self.N_A_high),
+            "N_YRI": (self.N_YRI_low, self.N_YRI_high),
+            "N_CEU": (self.N_CEU_low, self.N_CEU_high),
+            "N_CHB": (self.N_CHB_low, self.N_CHB_high),
+            "N_OOA": (self.N_OOA_low, self.N_OOA_high),
+            "r_CEU": (self.r_CEU_low, self.r_CEU_high),
+            "r_CHB": (self.r_CHB_low, self.r_CHB_high),
+            "T_arch_adm_end": (self.T_arch_adm_end_low, self.T_arch_adm_end_high),
+            "T_EU_AS": (self.T_EU_AS_low, self.T_EU_AS_high),
+            "T_B": (self.T_B_low, self.T_B_high),
+            "T_arch_afr_mig": (self.T_arch_afr_mig_low, self.T_arch_afr_mig_high),
+            "T_AF": (self.T_AF_low, self.T_AF_high),
+            "T_arch_afr_split": (self.T_arch_afr_split_low, self.T_arch_afr_split_high),
+            "T_nean_split": (self.T_nean_split_low, self.T_nean_split_high),
+            "m_YRI_CEU": (self.m_YRI_CEU_low, self.m_YRI_CEU_high),
+            "m_CEU_CHB": (self.m_CEU_CHB_low, self.m_CEU_CHB_high),
+            "m_AF_arch_af": (self.m_AF_arch_af_low, self.m_AF_arch_af_high),
+            "m_OOA_nean": (self.m_OOA_nean_low, self.m_OOA_nean_high),
+            "m_AF_B": (self.m_AF_B_low, self.m_AF_B_high),
+        }
+        low = [self.bounds[p][0] for p in self.bounds.keys()]
+        high = [self.bounds[p][1] for p in self.bounds.keys()]
+        if hasattr(snakemake.params, "device") and snakemake.params.device == "cpu":
+            device = torch.device("cpu")
+        else:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        N_distribution = BoxUniformZuko(torch.tensor(low[:5], dtype=torch.float32).to(device), torch.tensor(high[:5], dtype=torch.float32).to(device))
+        r_distribution = BoxUniformZuko(torch.tensor(low[5:7], dtype=torch.float32).to(device), torch.tensor(high[5:7], dtype=torch.float32).to(device))
+        T_distribution = Sort(Uniform(torch.tensor(low[7], dtype=torch.float32).to(device), torch.tensor(high[7], dtype=torch.float32).to(device)), 7)
+        m_distribution = BoxUniformZuko(torch.tensor(low[14:], dtype=torch.float32).to(device), torch.tensor(high[14:], dtype=torch.float32).to(device))
+        self.prior = Joint(N_distribution, r_distribution, T_distribution, m_distribution)
+
+    def __call__(self,theta):
+        if type(theta) == torch.Tensor:
+            theta = theta.squeeze().cpu().tolist()
+            
+        N_A,N_YRI, N_CEU, N_CHB, N_OOA = theta[:5]
+        r_CEU,r_CHB = theta[5:7]
+        # Note that these are in years not in generations
+        T_arch_adm_end,T_EU_AS,T_B,T_arch_afr_mig,T_AF,T_arch_afr_split,T_nean_split= theta[7:14]
+        m_YRI_CEU,m_CEU_CHB,m_AF_arch_af,m_OOA_nean,m_AF_B = theta[14:]
+        # Now we need to replace parameter values in model with the values from theta
+        species = stdpopsim.get_species("HomSap")
+        model = species.get_demographic_model("OutOfAfricaArchaicAdmixture_5R19")
+        model.model.populations[0].initial_size = N_YRI
+        model.model.populations[1].initial_size = N_CEU / np.exp(-r_CEU * T_EU_AS / model.generation_time)
+        model.model.populations[1].growth_rate = r_CEU
+        model.model.populations[2].initial_size = N_CHB / np.exp(-r_CHB * T_EU_AS / model.generation_time)
+        model.model.populations[2].growth_rate = r_CHB
+        model.model.populations[3].initial_size = N_A
+        model.model.populations[4].initial_size = N_A
+        model.model.migration_matrix[0,1] = m_YRI_CEU
+        model.model.migration_matrix[1,0] = m_YRI_CEU
+        model.model.migration_matrix[1,2] = m_CEU_CHB
+        model.model.migration_matrix[2,1] = m_CEU_CHB
+        # change demographic events based on theta
+        # first event is migration turned on between modern and archaic humans
+        model.model.events[0].time = T_arch_adm_end / model.generation_time
+        model.model.events[0].rate = m_AF_arch_af
+        model.model.events[1].time = T_arch_adm_end / model.generation_time
+        model.model.events[1].rate = m_AF_arch_af
+        model.model.events[2].time = T_arch_adm_end / model.generation_time
+        model.model.events[2].rate = m_OOA_nean
+        model.model.events[3].time = T_arch_adm_end / model.generation_time
+        model.model.events[3].rate = m_OOA_nean
+        model.model.events[4].time = T_arch_adm_end / model.generation_time
+        model.model.events[4].rate = m_OOA_nean
+        model.model.events[5].time = T_arch_adm_end / model.generation_time
+        model.model.events[5].rate = m_OOA_nean
+            # CEU and CHB merge into B with rate changes at T_EU_AS
+        model.model.events[6].time = T_EU_AS / model.generation_time
+        model.model.events[7].time = T_EU_AS / model.generation_time
+        model.model.events[8].time = T_EU_AS / model.generation_time
+        model.model.events[8].rate = m_AF_B
+        model.model.events[9].time = T_EU_AS / model.generation_time
+        model.model.events[9].rate = m_AF_B
+        model.model.events[10].time = T_EU_AS / model.generation_time
+        model.model.events[10].rate = m_AF_arch_af
+        model.model.events[11].time = T_EU_AS / model.generation_time
+        model.model.events[11].rate = m_AF_arch_af
+        model.model.events[12].time = T_EU_AS / model.generation_time
+        model.model.events[12].rate = m_OOA_nean
+        model.model.events[13].time = T_EU_AS / model.generation_time
+        model.model.events[13].rate = m_OOA_nean
+        model.model.events[14].time = T_EU_AS / model.generation_time
+        model.model.events[14].initial_size = N_OOA
+        # Population B merges into YRI at T_B
+        model.model.events[15].time = T_B / model.generation_time
+        model.model.events[16].time = T_B / model.generation_time
+        model.model.events[17].time = T_B / model.generation_time
+        model.model.events[17].rate = m_AF_arch_af
+        model.model.events[18].time = T_B / model.generation_time
+        model.model.events[18].rate = m_AF_arch_af
+        # Beginning of migration between African and archaic African populations
+        model.model.events[19].time = T_arch_afr_mig / model.generation_time
+        # Size changes to N_A (N_0 in stdpopsim source code) at T_AF
+        model.model.events[20].time = T_AF / model.generation_time
+        model.model.events[20].initial_size = N_A
+        # Archaic African merges with moderns
+        model.model.events[21].time = T_arch_afr_split / model.generation_time
+        # Neanderthal merges with moderns
+        model.model.events[22].time = T_nean_split / model.generation_time
+        engine = stdpopsim.get_engine("msprime")
+        contig = species.get_contig(length=self.contig_length)
+        ts = engine.simulate(model, contig, samples=self.samples)
 
         return ts
 
@@ -335,6 +640,8 @@ class PonAbe_IM_msprime_simulator(BaseSimulator):
 MODEL_LIST = {
     "AraTha_2epoch": AraTha_2epoch_simulator,
     "AraTha_2epoch_genetic_map": AraTha_2epoch_genetic_map_simulator,
+    "YRI_CEU": YRI_CEU_simulator,
+    "HomSap_ooa_archaic_simulator": HomSap_ooa_archaic_simulator,
     "HomSap_2epoch": HomSap_Africa_1b08_simulator,
     "gammaDFE_cnst_N": gammaDFE_cnst_N_simulator,
     "AnaPla_split_migration": AnaPla_split_migration_simulator,

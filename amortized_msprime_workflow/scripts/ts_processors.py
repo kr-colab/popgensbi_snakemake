@@ -198,7 +198,7 @@ class tskit_jsfs(BaseProcessor):
         super().__init__(snakemake, tskit_sfs.params_default)
     def __call__(self, ts):
         sfs = ts.allele_frequency_spectrum(
-            sample_sets = [ts.samples(population=0), ts.samples(population=1)], 
+            sample_sets = [ts.samples(population=i) for i in range(ts.num_populations) if len(ts.samples(population=i))>0], 
             windows = self.windows, 
             mode = self.mode, 
             span_normalise = self.span_normalise, 
@@ -264,7 +264,15 @@ class moments_LD_stats(BaseProcessor):
         pos_bins = np.logspace(1, np.log10(ts.sequence_length) - 1, num=self.n_bins, base=10)
         n = 0
 
-        output = np.zeros((len(pos_bins)-1) * 8 * (ts.num_populations + ts.num_populations * (ts.num_populations - 1) // 2))
+        # using dinf's misc function, ts_individuals, to check which populations have sampled individuals
+        from dinf.misc import ts_individuals
+        num_sampled_populations = 0
+        sampled_pop_ids = []
+        for pop in ts.populations():
+            if len(ts_individuals(ts, pop.metadata['name']) > 0):
+                num_sampled_populations += 1
+                sampled_pop_ids.append(pop.id)
+        output = np.zeros((len(pos_bins)-1) * 8 * (num_sampled_populations + num_sampled_populations * (num_sampled_populations - 1) // 2))
 
         while n < self.n_avg:
             n += 1
@@ -283,13 +291,13 @@ class moments_LD_stats(BaseProcessor):
             inds = np.digitize(distances, pos_bins)
             # make a genotype matrix that is just 0 or 1 (ancestral v.s. derived)
             Gs = [(ts.genotype_matrix(samples=ts.samples(population=i))[downsample_inds,  :] > 0.5).astype(float)
-                            for i in range(ts.num_populations)]
+                            for i in sampled_pop_ids]
             if self.phased == False:
                 # if not phased, sum odd and even rows to get genotype of each individual (not each haplotype) = 0, 1 or 2
-                Gs = [Gs[i][:, ::2] + Gs[i][:, 1::2] for i in range(ts.num_populations)]
+                Gs = [Gs[i][:, ::2] + Gs[i][:, 1::2] for i in range(num_sampled_populations)]
 
                 # First compute stats within each population
-            for i in range(ts.num_populations):
+            for i in range(num_sampled_populations):
                 if self.phased:
                     D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats(Gs[i], genotypes=False)
                 else:
@@ -319,13 +327,22 @@ class moments_LD_stats(BaseProcessor):
                 output[(len(pos_bins)-1)*(8*i+5):(len(pos_bins)-1)*(8*i+6)] += pi2_pw_binned_var
                 output[(len(pos_bins)-1)*(8*i+6):(len(pos_bins)-1)*(8*i+7)] += D_pw_binned_mean
                 output[(len(pos_bins)-1)*(8*i+7):(len(pos_bins)-1)*(8*i+8)] += D_pw_binned_var
-                
 
-            if ts.num_populations > 1:
-                k = 0
+            # there are more unique pairs of SNPs when there are more than 1 population
+            # so we need a new inds array
+            distances = []
+            for i in range(len(positions)):
+                for j in range(len(positions)):
+                    distances.append(positions[j] - positions[i])
+            
+            inds = np.digitize(distances, pos_bins)
+
+
+            if num_sampled_populations > 1:
+                pop_pair_idx = 0
                 # If there are more than 1 population, compute stats between populations
-                for i in range(ts.num_populations):
-                    for j in range(i+1, ts.num_populations):
+                for i in range(num_sampled_populations):
+                    for j in range(i+1, num_sampled_populations):
                         if self.phased:
                             D2_pw, Dz_pw, pi2_pw, D_pw = moments.LD.Parsing.compute_pairwise_stats_between(Gs[i], Gs[j], genotypes=False)
                         else:
@@ -347,17 +364,77 @@ class moments_LD_stats(BaseProcessor):
                             pi2_pw_binned_var[k] = np.var(pi2_pw[inds==k+1])
                             D_pw_binned_mean[k] = np.mean(D_pw[inds==k+1])
                             D_pw_binned_var[k] = np.var(D_pw[inds==k+1])
-                        output[(len(pos_bins)-1)*8*(ts.num_populations+k):(len(pos_bins)-1)*(8*(ts.num_populations+k)+1)] += D2_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+1):(len(pos_bins)-1)*(8*(ts.num_populations+k)+2)] += D2_pw_binned_var
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+2):(len(pos_bins)-1)*(8*(ts.num_populations+k)+3)] += Dz_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+3):(len(pos_bins)-1)*(8*(ts.num_populations+k)+4)] += Dz_pw_binned_var
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+4):(len(pos_bins)-1)*(8*(ts.num_populations+k)+5)] += pi2_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+5):(len(pos_bins)-1)*(8*(ts.num_populations+k)+6)] += pi2_pw_binned_var
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+6):(len(pos_bins)-1)*(8*(ts.num_populations+k)+7)] += D_pw_binned_mean
-                        output[(len(pos_bins)-1)*(8*(ts.num_populations+k)+7):(len(pos_bins)-1)*(8*(ts.num_populations+k)+8)] += D_pw_binned_var
-                        k += 1
+                        
+                        output[(len(pos_bins)-1)*8*(num_sampled_populations+pop_pair_idx):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+1)] += D2_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+1):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+2)] += D2_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+2):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+3)] += Dz_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+3):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+4)] += Dz_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+4):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+5)] += pi2_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+5):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+6)] += pi2_pw_binned_var
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+6):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+7)] += D_pw_binned_mean
+                        output[(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+7):(len(pos_bins)-1)*(8*(num_sampled_populations+pop_pair_idx)+8)] += D_pw_binned_var
+                        pop_pair_idx += 1
         output /= self.n_avg
         return torch.from_numpy(output).float()
+
+class moments_LD_stats2(BaseProcessor):
+    '''
+    second version of LD stats processor. Uses moments.LD.Parsing.compute_ld_statistics
+    '''
+    params_default = {
+        "rec_map_file":"rec_map_file.txt",
+        "pop_file":"pop_file.txt",
+        "pops":["deme0, deme1"],
+        "r_bins":[0, 1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3],
+        "n_segs":100,
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, moments_LD_stats2.params_default)
+        self.datadir = snakemake.params.datadir
+        self.ts_processor = snakemake.params.ts_processor
+        self.randn = np.random.randint(0, 10000)
+
+    def __call__(self, ts):
+        import moments
+        import os
+        # get the length of each segment
+        seg_len = int(ts.sequence_length / self.n_segs)
+        ld_stats = {}
+        for i in range(self.n_segs):
+            vcf_name = os.path.join(self.datadir, self.ts_processor, "{0}_seg_{1}.vcf".format(self.randn, i))
+            site_mask = np.ones(ts.num_sites, dtype=bool)
+            # unmask segments we want
+            for site in ts.sites():
+                if site.position > i * seg_len:
+                    if site.position < (i + 1) * seg_len:
+                        site_mask[site.id] = 0
+            with open(vcf_name, "w+") as fout:
+                ts.write_vcf(fout, site_mask=site_mask)
+            os.system(f"gzip {vcf_name}")
+            ld_stats[i] = moments.LD.Parsing.compute_ld_statistics(
+                str(vcf_name)+'.gz',
+                rec_map_file=os.path.join(self.datadir, self.rec_map_file),
+                pop_file=os.path.join(self.datadir, self.pop_file),
+                pops=self.pops,
+                r_bins=self.r_bins,
+                report=False)
+            os.system("rm " + str(vcf_name)+'.gz')
+            os.system("rm " + str(vcf_name)[:-3] + "h5")
+        mv = moments.LD.Parsing.bootstrap_data(ld_stats)
+        output = []
+        for i in range(len(mv["means"])):
+            elems = mv["means"][i].flatten()
+            for j in range(len(elems)):
+                output.append(elems[j])
+        for i in range(len(mv["varcovs"])):
+            elems = mv["varcovs"][i].flatten()
+            for j in range(len(elems)):
+                output.append(elems[j])
+        output = np.array(output)
+        return torch.from_numpy(output).float()
+        
+
+
 
 PROCESSOR_LIST = {
     "dinf": dinf_extract,
@@ -366,5 +443,6 @@ PROCESSOR_LIST = {
     "tskit_sfs": tskit_sfs,
     "tskit_jsfs": tskit_jsfs,
     "tskit_sfs_selection": tskit_sfs_selection, 
-    "moments_LD_stats": moments_LD_stats
+    "moments_LD_stats": moments_LD_stats,
+    "moments_LD_stats2": moments_LD_stats2
 }

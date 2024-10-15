@@ -1,4 +1,3 @@
-
 import torch
 
 import msprime
@@ -6,7 +5,7 @@ import stdpopsim
 import os
 import numpy as np
 import pickle
-from dadi_simulators import *
+from ts_simulators import *
 
 datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
@@ -21,8 +20,9 @@ simulator = MODEL_LIST[demog_model](snakemake)
 
 theta = simulator.prior.sample((1,))
 
-fs = simulator(theta)
-fs = fs.squeeze().cpu().numpy()
-np.save(os.path.join(datadir, f"fs_{num_simulations}.npy"), fs)
+ts = simulator(theta)
+with open(os.path.join(datadir, f"test_{num_simulations}.trees"), "wb") as ts_file:
+    ts.dump(ts_file)
+
 theta = theta.squeeze().cpu().numpy()
-np.save(os.path.join(datadir, f"theta_{num_simulations}.npy"), theta)
+np.save(os.path.join(datadir, f"test_theta_{num_simulations}.npy"), theta)

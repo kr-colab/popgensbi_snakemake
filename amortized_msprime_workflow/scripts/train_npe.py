@@ -1,9 +1,7 @@
-import glob
 import os
 import pickle
 
 from embedding_networks import *
-from sbi.neural_nets.embedding_nets import *
 from ts_simulators import *
 import numpy as np
 import torch
@@ -20,16 +18,13 @@ else:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-def load_data_files(data_dir, ts_processor, sim_rounds):
+def load_data_files(data_dir, ts_processor, n_train):
+    n_train = int(n_train)
     xs = []
     thetas = []
-    x_files_all = glob.glob(os.path.join(data_dir, ts_processor, f"sim_round_{sim_rounds}/", "x_*.npy"))
-    x_files = natsorted(x_files_all)
-    for xf in x_files:
-        xs.append(np.load(xf))
-        var = os.path.basename(xf)[2:-4]
-        thetas.append(np.load(os.path.join(data_dir, f"sim_round_{sim_rounds}/", f"theta_{var}.npy")))
-
+    for n in range(n_train):
+        xs.append(np.load(os.path.join(data_dir, ts_processor, f"x_{n}.npy")))
+        thetas.append(np.load(os.path.join(data_dir, f"theta_{n}.npy")))
     xs = torch.from_numpy(np.array(xs)).to(torch.float32).to(device)
     thetas = torch.from_numpy(np.array(thetas)).to(torch.float32).to(device)
     return thetas, xs
@@ -38,15 +33,15 @@ def load_data_files(data_dir, ts_processor, sim_rounds):
 datadir = snakemake.params.datadir
 ts_processor = snakemake.params.ts_processor
 posteriordir = snakemake.params.posteriordir
-sim_rounds = snakemake.params.sim_rounds
 ensemble = snakemake.params.ensemble
+n_train = snakemake.params.n_train
 
 if not os.path.isdir(posteriordir):
     os.mkdir(posteriordir)
-if not os.path.isdir(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}")):
-    os.mkdir(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}"))
+if not os.path.isdir(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}")):
+    os.mkdir(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}"))
 
-thetas, xs = load_data_files(datadir, ts_processor, sim_rounds)
+thetas, xs = load_data_files(datadir, ts_processor, n_train)
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 prior = simulator.prior
 
@@ -58,8 +53,10 @@ if snakemake.params.embedding_net == "ExchangeableCNN":
     else:
         embedding_net = ExchangeableCNN().to(device)
 elif snakemake.params.embedding_net == "MLP":
+    from sbi.neural_nets.embedding_nets import FCEmbedding
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).to(device)
 elif snakemake.params.embedding_net == "CNN":
+    from sbi.neural_nets.embedding_nets import CNNEmbedding
     embedding_net = CNNEmbedding(input_shape=xs.shape[1:]).to(device)
 elif snakemake.params.embedding_net =="Identity":
     embedding_net = torch.nn.Identity().to(device)
@@ -70,7 +67,7 @@ normalizing_flow_density_estimator = posterior_nn(
     embedding_net=embedding_net
 )
 # get the log directory for tensorboard summary writer
-log_dir = os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", "sbi_logs", f"rep_{ensemble}")
+log_dir = os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", "sbi_logs", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
 inference = SNPE(
     prior=prior,
@@ -80,9 +77,8 @@ inference = SNPE(
     summary_writer=writer,
 )
 
-for n in range(int(sim_rounds)+1):
-    thetas, xs = load_data_files(datadir, ts_processor, n)
-    inference = inference.append_simulations(thetas, xs, proposal=prior)
+thetas, xs = load_data_files(datadir, ts_processor, n_train)
+inference = inference.append_simulations(thetas, xs, proposal = prior)
 
 posterior_estimator = inference.append_simulations(thetas, xs).train(
     show_train_summary=True,
@@ -96,12 +92,12 @@ posterior = DirectPosterior(
     prior=prior, 
     device=device.type)
 
-with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(inference, f)
 # save posterior estimator (this contains trained normalizing flow - can be used for fine-turning?)
-with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"posterior_estimator_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", f"posterior_estimator_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior_estimator, f)
-with open(os.path.join(posteriordir, ts_processor, f"sim_round_{sim_rounds}", f"posterior_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", f"posterior_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior, f)
 
 

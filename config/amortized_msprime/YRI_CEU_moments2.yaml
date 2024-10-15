@@ -1,0 +1,9 @@
+datadir: "results/amortized_msprime/YRI_CEU/data/"
+posteriordir: "results/amortized_msprime/YRI_CEU/posterior/"
+demog_model: "YRI_CEU"
+ts_processor: "moments_LD_stats2"
+embedding_net: "MLP"
+n_sims : 30000
+n_trains : [1e2, 3e2, 1e3, 3e3, 1e4, 3e4]
+pops : ["YRI", "CEU"]
+n_ensemble: 5 # number of ensemble members

@@ -4,28 +4,30 @@ import os
 # Set up config
 configfile: "config/amortized_dadi/AraTha_2epoch.yaml"
 
-n_sims_per_round = config["n_sims_per_round"] # number of simulations per round
-n_rounds = config["n_rounds"] # number of rounds
+n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
 datadir = config["datadir"] # directory for training data
 posteriordir = config["posteriordir"] # output directory for posterior
+n_trains = config["n_trains"] # training set sizes
+n_trains = [int(float(n)) for n in n_trains]
+max_n_train = n_trains[-1]
 
 rule all:
     input:
         os.path.join(datadir, "fs_star.npy"),
-        expand(os.path.join(datadir, "sim_round_{k}/", "fs_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
-        expand(os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"), k=list(range(n_rounds)), i=range(n_sims_per_round)),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "inference_rep_{e}.pkl"), k=list(range(n_rounds)), e=range(n_ensemble)),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "ensemble_posterior.pkl"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "default_obs_corner.png"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "confidence_intervals.png"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "confidence_intervals.npy"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "2d_comp_multinom.png"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "map_thetas.npy"), k=list(range(n_rounds))),
-        expand(os.path.join(posteriordir, "sim_round_{k}/", "model_fs.npy"), k=list(range(n_rounds)))
+        expand(os.path.join(datadir, "fs_{i}.npy"), i=range(n_sims)),
+        expand(os.path.join(datadir, "theta_{i}.npy"), i=range(n_sims)),
+        expand(os.path.join(posteriordir, "n_train_{k}", "posterior_rep_{e}.pkl"), k=list(n_trains), e=range(n_ensemble)),
+        expand(os.path.join(posteriordir, "n_train_{k}", "posterior_estimator_rep_{e}.pkl"), k=list(n_trains), e=range(n_ensemble)),
+        expand(os.path.join(posteriordir, "n_train_{k}", "inference_rep_{e}.pkl"), k=list(n_trains), e=range(n_ensemble)),
+        expand(os.path.join(posteriordir, "n_train_{k}", "ensemble_posterior.pkl"), k=list(n_trains)),
+        expand(os.path.join(posteriordir, "n_train_{k}", "default_obs_samples.npy"), k=list(n_trains)),
+        expand(os.path.join(posteriordir, "n_train_{k}", "default_obs_corner.png"), k=list(n_trains)),
+        os.path.join(posteriordir, "confidence_intervals.png"),
+        os.path.join(posteriordir, "confidence_intervals.npy"),
+        expand(os.path.join(posteriordir, "n_train_{k}/", "2d_comp_multinom.png"), k=list(n_trains)),
+        expand(os.path.join(posteriordir, "n_train_{k}/", "map_thetas.npy"), k=list(n_trains)),
+        expand(os.path.join(posteriordir, "n_train_{k}/", "model_fs.npy"), k=list(n_trains))
 
 
 rule simulate_default:
@@ -42,15 +44,14 @@ rule simulate_default:
 
 rule simulate:
     message:
-        "simulating sfs for round {wildcards.k}..."
+        "simulating {wildcards.i}-th sfs..."
     output:
-        os.path.join(datadir, "sim_round_{k}/", "fs_{i}.npy"),
-        os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"),
+        os.path.join(datadir, "fs_{i}.npy"),
+        os.path.join(datadir, "theta_{i}.npy"),
     log:
-        "logs/simulate_ts_round_{k}_{i}.log"
+        "logs/simulate_sfs_{i}.log"
     params:
         num_simulations=lambda wildcards: wildcards.i,
-        sim_rounds=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}
     script:
         "scripts/simulate_fs.py"
@@ -58,87 +59,78 @@ rule simulate:
 
 rule train_npe:
     message:
-        "training neural posterior estimators for round {wildcards.k} rep {wildcards.e}..."
+        "training neural posterior estimators with {wildcards.k} data points rep {wildcards.e}..."
     input:
-        lambda wildcards: expand(os.path.join(datadir, "sim_round_{k}/", "fs_{i}.npy"), i=range(n_sims_per_round), k=[wildcards.k]),
-        lambda wildcards: expand(os.path.join(datadir, "sim_round_{k}/", "theta_{i}.npy"), i=range(n_sims_per_round), k=[wildcards.k])
+        lambda wildcards: expand(os.path.join(datadir, "fs_{l}.npy"), l=range(int(wildcards.k))),
+        lambda wildcards: expand(os.path.join(datadir, "theta_{l}.npy"), l=range(int(wildcards.k)))
     output:
-        os.path.join(posteriordir, "sim_round_{k}/", "posterior_rep_{e}.pkl"),
-        os.path.join(posteriordir, "sim_round_{k}/", "posterior_estimator_rep_{e}.pkl"),
-        os.path.join(posteriordir, "sim_round_{k}/", "inference_rep_{e}.pkl")
+        os.path.join(posteriordir, "n_train_{k}/", "posterior_rep_{e}.pkl"),
+        os.path.join(posteriordir, "n_train_{k}/", "posterior_estimator_rep_{e}.pkl"),
+        os.path.join(posteriordir, "n_train_{k}/", "inference_rep_{e}.pkl")
     log:
-        "logs/train_npe_round_{k}_rep_{e}.log"
+        "logs/train_npe_n_{k}_rep_{e}.log"
     resources:
-        mem_mb="20000",
-        slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        mem_mb="20000"
     params:
-        sim_rounds="{k}",
+        n_train="{k}",
         ensemble="{e}",
         **{k: v for k, v in config.items()}
     script: "scripts/train_npe.py"
 
 rule posterior_ensemble:
     message:
-        "creating an ensemble posterior for round {wildcards.k}"
+        "creating an ensemble posterior for training data size {wildcards.k}"
     input:
-        lambda wildcards: expand(os.path.join(posteriordir, "sim_round_{k}/", "posterior_rep_{e}.pkl"), e=range(n_ensemble), k=[wildcards.k])
+        lambda wildcards: expand(os.path.join(posteriordir, "n_train_{k}/", "posterior_rep_{e}.pkl"), e=range(n_ensemble), k=[wildcards.k])
     output:
-        os.path.join(posteriordir, "sim_round_{k}/", "ensemble_posterior.pkl")
+        os.path.join(posteriordir, "n_train_{k}/", "ensemble_posterior.pkl")
     log:
-        "logs/posterior_ensemble_round_{k}.log"
+        "logs/posterior_ensemble_n_{k}.log"
     resources:
-        mem_mb="32000",
-        slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        mem_mb="32000"
     params:
-        sim_rounds="{k}",
+        n_train="{k}",
         **{k: v for k, v in config.items()}
     script: "scripts/posterior_ensemble.py"
     
 rule plot_posterior:
-    message: "visualizing learned posterior for round {wildcards.k}..."
+    message: "visualizing learned posterior for training data size {wildcards.k}..."
     input: 
-        os.path.join(posteriordir, "sim_round_{k}/", "ensemble_posterior.pkl"),
+        os.path.join(posteriordir, "n_train_{k}/", "ensemble_posterior.pkl"),
         os.path.join(datadir, "fs_star.npy"),
     output:
-        os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy"),
-        os.path.join(posteriordir, "sim_round_{k}/", "default_obs_corner.png"),
-        os.path.join(posteriordir, "sim_round_{k}/model_fs.npy"),
-        os.path.join(posteriordir, "sim_round_{k}/map_thetas.npy")
+        os.path.join(posteriordir, "n_train_{k}/", "default_obs_samples.npy"),
+        os.path.join(posteriordir, "n_train_{k}/", "default_obs_corner.png"),
+        os.path.join(posteriordir, "n_train_{k}/model_fs.npy"),
+        os.path.join(posteriordir, "n_train_{k}/map_thetas.npy")
 
     log: "logs/plot_posterior_round_{k}.log"
     resources:
-        mem_mb="5000",
-        slurm_partition="gpu",
-        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+        mem_mb="5000"
     params:
-        sim_rounds=lambda wildcards: wildcards.k,
+        n_train=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}
     script: "scripts/plotting.py"
 
 rule plot_ci:
-    message: "plotting confidence intervals for round {wildcards.k}..."
+    message: "plotting confidence intervals with training dataset sizes {n_trains}..."
     input:
-        lambda wildcards: os.path.join(posteriordir, "sim_round_{}/confidence_intervals.npy".format(int(wildcards.k) -1)) if int(wildcards.k) >= 1 else [],
-        os.path.join(posteriordir, "sim_round_{k}/", "default_obs_samples.npy")
+        expand(os.path.join(posteriordir, "n_train_{n}/", "default_obs_samples.npy"), n=n_trains)
     output:
-        os.path.join(posteriordir, "sim_round_{k}/", "confidence_intervals.npy"),
-        os.path.join(posteriordir, "sim_round_{k}/", "confidence_intervals.png")
+        ci_npy = os.path.join(posteriordir, "confidence_intervals.npy"),
+        ci_png = os.path.join(posteriordir, "confidence_intervals.png")
     params:
-        sim_rounds=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}
     script: "scripts/plot_confidence_intervals.py"
 
-
 rule plot_2d_comp_multinom:
-    message: "compare default fs to simulated fs from MAP parameters for round {wildcards.k}..."
+    message: "compare default fs to simulated fs from MAP parameters for training data size {wildcards.k}..."
     input:
-        os.path.join(posteriordir, "sim_round_{k}/model_fs.npy"),
+        os.path.join(posteriordir, "n_train_{k}/model_fs.npy"),
         os.path.join(datadir, "fs_star.npy")
     output:
-        os.path.join(posteriordir, "sim_round_{k}/2d_comp_multinom.png"), 
+        os.path.join(posteriordir, "n_train_{k}/2d_comp_multinom.png"), 
     params:
-        sim_rounds=lambda wildcards: wildcards.k,
+        n_train=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}
     script: "scripts/plot_2d_comp_multinom.py"

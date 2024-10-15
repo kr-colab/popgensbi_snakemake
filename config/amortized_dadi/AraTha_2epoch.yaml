@@ -1,7 +1,7 @@
-n_sims_per_round : 1000
-n_rounds : 10
+n_sims : 10000
 datadir: "results/amortized_dadi/AraTha_2epoch/data/"
 posteriordir: "results/amortized_dadi/AraTha_2epoch/posterior/"
 demog_model: "AraTha_2epoch"
 embedding_net: "Identity"
 n_ensemble: 10
+n_trains: [1e2, 3e2, 1e3, 3e3, 1e4]
