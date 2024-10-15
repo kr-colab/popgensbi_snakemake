@@ -35,14 +35,15 @@ for i in range(num_params):
     for j, z_score in enumerate(z_scores):
         lower = MLEs[:, i] - uncerts[:, i] * z_score
         upper = MLEs[:, i] + uncerts[:, i] * z_score
-        coverage[i, j] = np.sum(np.logical_and(truths[:, i] >= lower, truths[:, i] < upper)) / len(truths)
+        coverages[i, j] = np.sum(np.logical_and(truths[:, i] >= lower, truths[:, i] < upper)) / len(truths)
         axs[i].scatter(ranks, lower - truths[:, i], color=cmap(j / z_scores.size), s=1)
         axs[i].scatter(ranks, upper - truths[:, i], color=cmap(j / z_scores.size), s=1)
     axs[i].axhline(y=0.0, color='black', linestyle='--', linewidth=1)
     axs[i].text(0.98, 0.9, list(bounds.keys())[i], transform=axs[i].transAxes, horizontalalignment='right')
+    axs[i].set_ylim((-2, 2))
 fig.supylabel("(Quantile - true param value)")
 fig.supxlabel("Rank order true param value")
-plt.savefig(os.path.join(datadir, "ci_rank_param_dadi_godambe.png"))
+plt.savefig(os.path.join(datadir, "ci_rank_param_dadi_godambe_ylim.png"))
 plt.clf()
        
 
@@ -54,4 +55,4 @@ plt.xlabel("Expected Coverage")
 plt.ylabel("Obseved Coverage")
 plt.legend()
 plt.savefig(os.path.join(datadir, "dadi_godambe_coverage.png"))
-np.save(os.path.join(datadir, "dadi_godmabe_coverage.npy"), coverages)
+np.save(os.path.join(datadir, "dadi_godambe_coverage.npy"), coverages)

@@ -15,7 +15,7 @@ rule all:
         expand(os.path.join(datadir, "test_MLE_{r}.npy"), r=range(n_rep)),
         expand(os.path.join(datadir, "test_uncerts_{r}.npy"), r=range(n_rep)),
         expand(os.path.join(datadir, "test_GIM_{r}.npy"), r=range(n_rep)),
-        os.path.join(datadir, "ci_rank_param_dadi_godambe.png"),
+        os.path.join(datadir, "ci_rank_param_dadi_godambe_ylim.png"),
         os.path.join(datadir, "dadi_godambe_coverage.png"),
         os.path.join(datadir, "dadi_godambe_coverage.npy")
 
@@ -58,7 +58,7 @@ rule dadi_coverage_prob:
         expand(os.path.join(datadir, "test_uncerts_{r}.npy"), r=range(n_rep)),
         expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep))
     output:
-        os.path.join(datadir, "ci_rank_param_dadi_godambe.png"),
+        os.path.join(datadir, "ci_rank_param_dadi_godambe_ylim.png"),
         os.path.join(datadir, "dadi_godambe_coverage.png"),
         os.path.join(datadir, "dadi_godambe_coverage.npy")
     params:
