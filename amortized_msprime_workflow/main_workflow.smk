@@ -35,7 +35,10 @@ rule all:
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "posterior_coverage.png"), k=n_trains),
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "observed_coverage.npy"), k=n_trains),
         expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "posterior_samples_test.npy"), k=n_trains),
-        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "ci_rank_param.png"), k=n_trains)
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "ci_rank_param.png"), k=n_trains),
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "sbc_stats.pkl"), k=n_trains),
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "sbc_rank_hist.png"), k=n_trains),
+        expand(os.path.join(posteriordir, ts_processor, "n_train_{k}", "sbc_rank_cdf.png"), k=n_trains),
 
 
 
@@ -206,6 +209,25 @@ rule plot_coverage_prob:
         n_train=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}
     script: "scripts/coverage_prob.py"
+
+rule plot_coverage_prob_hpd:
+    message: "estimate coverage probability for posterior learned from {wildcards.k} sims"
+    input:
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "ensemble_posterior.pkl"),
+        expand(os.path.join(datadir, ts_processor, "test_x_{r}.npy"), r=range(n_rep)),
+        expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep))
+    output:
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "sbc_stats.pkl"),
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "sbc_rank_hist.png"),
+        os.path.join(posteriordir, ts_processor, "n_train_{k}", "sbc_rank_cdf.png")
+    resources:
+        mem_mb="10000",
+        slurm_partition="gpu",
+        slurm_extra="--gres=gpu:1 --constraint=gpu-10gb"
+    params:
+        n_train=lambda wildcards: wildcards.k,
+        **{k: v for k, v in config.items()}
+    script: "scripts/run_sbc.py"
 
 
 
