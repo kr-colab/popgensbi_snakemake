@@ -115,7 +115,8 @@ class ExchangeableCNN(nn.Module):
                     mask = x[:, i, :, :, :] != -1
                     inds = torch.where(mask)
                     x_ = x[:, i, :, :, :][inds].view(batch_ndim, *shape)
-                    xs.append(self.cnn(x_))
+                    xs.append(self.symmetric(self.cnn(x_)))
                 x = torch.cat(xs, dim=-1)
+                x = self.globalpool(x)
                 return self.feature_extractor[:2](x)
-            return self.feature_extractor[:2](self.cnn(x))
+            return self.feature_extractor[:2](self.globalpool(self.symmetric(self.cnn(x))))
