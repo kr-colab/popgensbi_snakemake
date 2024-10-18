@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/AraTha_2epoch_genetic_map_sfs.yaml"
+configfile: "config/amortized_msprime/YRI_CEU_moments.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -77,6 +77,8 @@ rule simulate_test_ts:
     params:
         num_simulations=lambda wildcards: wildcards.r,
         **{k: v for k, v in config.items()}
+    group:
+        "sim_test"
     script:
         "scripts/simulate_test_ts.py"
 
@@ -90,6 +92,8 @@ rule process_test_ts:
     params:
         num_simulations=lambda wildcards: wildcards.r,
         **{k: v for k, v in config.items()}
+    group:
+        "process_test"
     script:
         "scripts/process_test_ts.py"
 
@@ -104,6 +108,8 @@ rule simulate_ts:
     params:
         num_simulations=lambda wildcards: wildcards.i,
         **{k: v for k, v in config.items()}
+    group:
+        "sim"
     script:
         "scripts/simulate_ts.py"
 
@@ -119,6 +125,8 @@ rule process_ts:
     params:
         num_simulations=lambda wildcards: wildcards.i,
         **{k: v for k, v in config.items()}
+    group:
+        "process"
     script:
         "scripts/process_ts.py"
 
@@ -210,7 +218,7 @@ rule plot_coverage_prob:
         **{k: v for k, v in config.items()}
     script: "scripts/coverage_prob.py"
 
-rule plot_coverage_prob_hpd:
+rule run_sbc:
     message: "estimate coverage probability for posterior learned from {wildcards.k} sims"
     input:
         os.path.join(posteriordir, ts_processor, "n_train_{k}", "ensemble_posterior.pkl"),
