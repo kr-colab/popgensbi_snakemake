@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/YRI_CEU_moments.yaml"
+configfile: "config/amortized_msprime/YRI_CEU_moments2.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -42,17 +42,17 @@ rule all:
 
 
 
-rule simulate_default_ts:
-    message:
-        "simulating with default thetas..."
-    output:
-        os.path.join(datadir, "ts_star.trees")
-    log:
-        "logs/simulate_default_ts.log"
-    params:
-        **{k: v for k, v in config.items()}
-    script:
-        "scripts/simulate_default_ts.py"
+#rule simulate_default_ts:
+#    message:
+#        "simulating with default thetas..."
+#    output:
+#        os.path.join(datadir, "ts_star.trees")
+#    log:
+#        "logs/simulate_default_ts.log"
+#    params:
+#        **{k: v for k, v in config.items()}
+#    script:
+#        "scripts/simulate_default_ts.py"
 
 rule process_default_ts:
     message:
@@ -63,24 +63,26 @@ rule process_default_ts:
         os.path.join(datadir, ts_processor, "x_obs.npy")
     log:
         "logs/process_default_ts.log"
+    resources:
+        threads=7
     params:
         **{k: v for k, v in config.items()}
     script:
         "scripts/process_default_ts.py"
 
-rule simulate_test_ts:
-    message:
-        "simulate {wildcards.r}-th ts for coverage test..."
-    output:
-        os.path.join(datadir, "test_{r}.trees"),
-        os.path.join(datadir, "test_theta_{r}.npy")
-    params:
-        num_simulations=lambda wildcards: wildcards.r,
-        **{k: v for k, v in config.items()}
-    group:
-        "sim_test"
-    script:
-        "scripts/simulate_test_ts.py"
+#rule simulate_test_ts:
+#    message:
+#        "simulate {wildcards.r}-th ts for coverage test..."
+#    output:
+#        os.path.join(datadir, "test_{r}.trees"),
+#        os.path.join(datadir, "test_theta_{r}.npy")
+#    params:
+#        num_simulations=lambda wildcards: wildcards.r,
+#        **{k: v for k, v in config.items()}
+#    group:
+#        "sim_test"
+#    script:
+#        "scripts/simulate_test_ts.py"
 
 rule process_test_ts:
     message:
@@ -94,24 +96,26 @@ rule process_test_ts:
         **{k: v for k, v in config.items()}
     group:
         "process_test"
+    resources:
+        threads=7
     script:
         "scripts/process_test_ts.py"
 
-rule simulate_ts:
-    message:
-        "simulating {wildcards.i}-th ts..."
-    output:
-        os.path.join(datadir, "{i}.trees"),
-        os.path.join(datadir, "theta_{i}.npy"),
-    log:
-        "logs/simulate_ts_{i}.log"
-    params:
-        num_simulations=lambda wildcards: wildcards.i,
-        **{k: v for k, v in config.items()}
-    group:
-        "sim"
-    script:
-        "scripts/simulate_ts.py"
+#rule simulate_ts:
+#    message:
+#        "simulating {wildcards.i}-th ts..."
+#    output:
+#        os.path.join(datadir, "{i}.trees"),
+#        os.path.join(datadir, "theta_{i}.npy"),
+#    log:
+#        "logs/simulate_ts_{i}.log"
+#    params:
+#        num_simulations=lambda wildcards: wildcards.i,
+#        **{k: v for k, v in config.items()}
+#    group:
+#        "sim"
+#    script:
+#        "scripts/simulate_ts.py"
 
 rule process_ts:
     message:
@@ -122,6 +126,8 @@ rule process_ts:
         os.path.join(datadir, ts_processor, "x_{i}.npy")
     log:
         "logs/process_ts_{i}.log"
+    resources:
+        threads=7,
     params:
         num_simulations=lambda wildcards: wildcards.i,
         **{k: v for k, v in config.items()}
