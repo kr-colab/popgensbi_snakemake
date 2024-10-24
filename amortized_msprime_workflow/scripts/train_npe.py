@@ -52,6 +52,13 @@ if snakemake.params.embedding_net == "ExchangeableCNN":
         embedding_net = ExchangeableCNN(unmasked_x_shps=[(2, v, snakemake.params.n_snps) for v in simulator.samples.values()]).to(device)
     else:
         embedding_net = ExchangeableCNN().to(device)
+elif snakemake.params.embedding_net == "ExchangeableCNN_OG":
+    if ts_processor == "three_channel_feature_matrices":
+        embedding_net = ExchangeableCNN_OG(channels=3).to(device)
+    elif ts_processor == "dinf_multiple_pops":
+        embedding_net = ExchangeableCNN_OG(unmasked_x_shps=[(2, v, snakemake.params.n_snps) for v in simulator.samples.values()]).to(device)
+    else:
+        embedding_net = ExchangeableCNN_OG().to(device)
 elif snakemake.params.embedding_net == "MLP":
     from sbi.neural_nets.embedding_nets import FCEmbedding
     embedding_net = FCEmbedding(input_dim = xs.shape[-1]).to(device)

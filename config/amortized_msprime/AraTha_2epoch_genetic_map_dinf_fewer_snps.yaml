@@ -1,0 +1,10 @@
+datadir: "results/amortized_msprime/AraTha_2epoch_genetic_map/data/"
+posteriordir: "results/amortized_msprime/AraTha_2epoch_genetic_map/posterior/"
+demog_model: "AraTha_2epoch_genetic_map"
+ts_processor: "dinf"
+n_snps: 500
+maf_thresh: 0.1
+embedding_net: "ExchangeableCNN"
+n_sims : 20000
+n_trains : [2e4]
+n_ensemble: 10 # number of ensemble members

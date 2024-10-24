@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/YRI_CEU_moments2.yaml"
+configfile: "config/amortized_msprime/AraTha_2epoch_genetic_map_dinf_fewer_snps_OG_CNN.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -54,21 +54,19 @@ rule all:
 #    script:
 #        "scripts/simulate_default_ts.py"
 
-rule process_default_ts:
-    message:
-        "getting summary stats from default tree sequences..."
-    input:
-        os.path.join(datadir, "ts_star.trees")
-    output:
-        os.path.join(datadir, ts_processor, "x_obs.npy")
-    log:
-        "logs/process_default_ts.log"
-    resources:
-        threads=7
-    params:
-        **{k: v for k, v in config.items()}
-    script:
-        "scripts/process_default_ts.py"
+#rule process_default_ts:
+#    message:
+#        "getting summary stats from default tree sequences..."
+#    input:
+#        os.path.join(datadir, "ts_star.trees")
+#    output:
+#        os.path.join(datadir, ts_processor, "x_obs.npy")
+#    log:
+#        "logs/process_default_ts.log"
+#    params:
+#        **{k: v for k, v in config.items()}
+#    script:
+#        "scripts/process_default_ts.py"
 
 #rule simulate_test_ts:
 #    message:
@@ -84,22 +82,20 @@ rule process_default_ts:
 #    script:
 #        "scripts/simulate_test_ts.py"
 
-rule process_test_ts:
-    message:
-        "process {wildcards.r}-th ts for coverage test..."
-    input:
-        os.path.join(datadir, "test_{r}.trees")
-    output:
-        os.path.join(datadir, ts_processor, "test_x_{r}.npy")
-    params:
-        num_simulations=lambda wildcards: wildcards.r,
-        **{k: v for k, v in config.items()}
-    group:
-        "process_test"
-    resources:
-        threads=7
-    script:
-        "scripts/process_test_ts.py"
+#rule process_test_ts:
+#    message:
+#        "process {wildcards.r}-th ts for coverage test..."
+#    input:
+#        os.path.join(datadir, "test_{r}.trees")
+#    output:
+#        os.path.join(datadir, ts_processor, "test_x_{r}.npy")
+#    params:
+#        num_simulations=lambda wildcards: wildcards.r,
+#        **{k: v for k, v in config.items()}
+#    group:
+#        "process_test"
+#    script:
+#        "scripts/process_test_ts.py"
 
 #rule simulate_ts:
 #    message:
@@ -117,24 +113,22 @@ rule process_test_ts:
 #    script:
 #        "scripts/simulate_ts.py"
 
-rule process_ts:
-    message:
-        "process {wildcards.i}-th ts..."
-    input:
-        os.path.join(datadir, "{i}.trees")
-    output:
-        os.path.join(datadir, ts_processor, "x_{i}.npy")
-    log:
-        "logs/process_ts_{i}.log"
-    resources:
-        threads=7,
-    params:
-        num_simulations=lambda wildcards: wildcards.i,
-        **{k: v for k, v in config.items()}
-    group:
-        "process"
-    script:
-        "scripts/process_ts.py"
+#rule process_ts:
+#    message:
+#        "process {wildcards.i}-th ts..."
+#    input:
+#        os.path.join(datadir, "{i}.trees")
+#    output:
+#        os.path.join(datadir, ts_processor, "x_{i}.npy")
+#    log:
+#        "logs/process_ts_{i}.log"
+#    params:
+#        num_simulations=lambda wildcards: wildcards.i,
+#        **{k: v for k, v in config.items()}
+#    group:
+#        "process"
+#    script:
+#        "scripts/process_ts.py"
 
 rule train_npe:
     message:
