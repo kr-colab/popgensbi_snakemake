@@ -2,7 +2,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/AraTha_2epoch_genetic_map_dinf_fewer_snps_OG_CNN.yaml"
+configfile: "config/amortized_msprime/YRI_CEU_sfs.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
