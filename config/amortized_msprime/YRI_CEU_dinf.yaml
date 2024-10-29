@@ -4,7 +4,6 @@ demog_model: "YRI_CEU"
 ts_processor: "dinf_multiple_pops"
 embedding_net: "ExchangeableCNN_OG"
 n_sims : 80000
-n_trains : [8e4]
+n_trains : [5e4, 8e4]
 n_snps : 500
-phased: True
 n_ensemble: 10 # number of ensemble members
