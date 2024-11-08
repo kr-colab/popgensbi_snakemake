@@ -18,12 +18,12 @@ else:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-def load_data_files(data_dir, ts_processor, n_train):
+def load_data_files(data_dir, datasubdir, n_train):
     n_train = int(n_train)
     xs = []
     thetas = []
     for n in range(n_train):
-        xs.append(np.load(os.path.join(data_dir, ts_processor, f"x_{n}.npy")))
+        xs.append(np.load(os.path.join(data_dir, datasubdir, f"x_{n}.npy")))
         thetas.append(np.load(os.path.join(data_dir, f"theta_{n}.npy")))
     xs = torch.from_numpy(np.array(xs)).to(torch.float32).to(device)
     thetas = torch.from_numpy(np.array(thetas)).to(torch.float32).to(device)
@@ -31,17 +31,19 @@ def load_data_files(data_dir, ts_processor, n_train):
 
 
 datadir = snakemake.params.datadir
+datasubdir = snakemake.params.datasubdir
 ts_processor = snakemake.params.ts_processor
 posteriordir = snakemake.params.posteriordir
+posteriorsubdir = snakemake.params.posteriorsubdir
 ensemble = snakemake.params.ensemble
 n_train = snakemake.params.n_train
 
 if not os.path.isdir(posteriordir):
     os.mkdir(posteriordir)
-if not os.path.isdir(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}")):
-    os.mkdir(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}"))
+if not os.path.isdir(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}")):
+    os.mkdir(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}"))
 
-thetas, xs = load_data_files(datadir, ts_processor, n_train)
+thetas, xs = load_data_files(datadir, datasubdir, n_train)
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 prior = simulator.prior
 
@@ -74,7 +76,7 @@ normalizing_flow_density_estimator = posterior_nn(
     embedding_net=embedding_net
 )
 # get the log directory for tensorboard summary writer
-log_dir = os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", "sbi_logs", f"rep_{ensemble}")
+log_dir = os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "sbi_logs", f"rep_{ensemble}")
 writer = SummaryWriter(log_dir=log_dir)
 inference = SNPE(
     prior=prior,
@@ -84,7 +86,6 @@ inference = SNPE(
     summary_writer=writer,
 )
 
-thetas, xs = load_data_files(datadir, ts_processor, n_train)
 inference = inference.append_simulations(thetas, xs, proposal = prior)
 
 posterior_estimator = inference.append_simulations(thetas, xs).train(
@@ -99,12 +100,12 @@ posterior = DirectPosterior(
     prior=prior, 
     device=device.type)
 
-with open(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", f"inference_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(inference, f)
 # save posterior estimator (this contains trained normalizing flow - can be used for fine-turning?)
-with open(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", f"posterior_estimator_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", f"posterior_estimator_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior_estimator, f)
-with open(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", f"posterior_rep_{ensemble}.pkl"), "wb") as f:
+with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", f"posterior_rep_{ensemble}.pkl"), "wb") as f:
     pickle.dump(posterior, f)
 
 

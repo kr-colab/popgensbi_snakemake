@@ -11,7 +11,9 @@ from sbi.analysis import check_sbc, run_sbc, get_nltp, sbc_rank_plot
 
 
 datadir = snakemake.params.datadir
+datasubdir = snakemake.params.datasubdir
 posteriordir = snakemake.params.posteriordir
+posteriorsubdir = snakemake.params.posteriorsubdir
 ts_processor = snakemake.params.ts_processor
 n_train = snakemake.params.n_train
 
@@ -19,15 +21,15 @@ simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 processor = PROCESSOR_LIST[ts_processor](snakemake)
 
 
-with open(f"{posteriordir}/{ts_processor}/n_train_{n_train}/ensemble_posterior.pkl", "rb") as f:
+with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "ensemble_posterior.pkl"), "rb") as f:
     posterior = pickle.load(f)   
 
-num_sbc_runs = 1000   
+num_sbc_runs = int(snakemake.params.n_boot)  
 
 xs = []
 thetas = []
 for i in range(num_sbc_runs):
-    x = torch.from_numpy(np.load(os.path.join(datadir, ts_processor, f"test_x_{i}.npy")))
+    x = torch.from_numpy(np.load(os.path.join(datadir, datasubdir, f"test_x_{i}.npy")))
     xs.append(x)
     theta = torch.from_numpy(np.load(os.path.join(datadir, f"test_theta_{i}.npy")))
     thetas.append(theta)
@@ -45,7 +47,7 @@ check_stats = check_sbc(
 )
 
 
-with open(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", "sbc_stats.pkl"), 'wb') as file:
+with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "sbc_stats.pkl"), 'wb') as file:
     pickle.dump(check_stats, file)
 
 from sbi.analysis import sbc_rank_plot
@@ -57,7 +59,7 @@ f, ax = sbc_rank_plot(
     num_bins=None,  # by passing None we use a heuristic for the number of bins.
 )
 
-plt.savefig(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", "sbc_rank_hist.png"))
+plt.savefig(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "sbc_rank_hist.png"))
 
 f, ax = sbc_rank_plot(ranks, num_posterior_samples, plot_type="cdf")
-plt.savefig(os.path.join(posteriordir, ts_processor, f"n_train_{n_train}", "sbc_rank_cdf.png"))
+plt.savefig(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "sbc_rank_cdf.png"))

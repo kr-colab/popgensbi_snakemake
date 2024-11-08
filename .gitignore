@@ -19,3 +19,4 @@ amortized_msprime_workflow/train_NPE_and_viz_dinf.smk
 amortized_msprime_workflow/train_NPE_and_viz.smk
 amortized_msprime_workflow/switch_ts_processor.smk
 amortized_msprime_workflow/run_sbc.smk
+config/amortized_msprime/testing.yaml
