@@ -34,7 +34,6 @@ rule plot_coverage_prob_hpd:
         os.path.join(posteriordir, ts_processor, "n_train_{k}", "observed_coverage_hpd.npy")
     resources:
         mem_mb="100000",
-        slurm_partition="memory",
     params:
         n_train=lambda wildcards: wildcards.k,
         **{k: v for k, v in config.items()}

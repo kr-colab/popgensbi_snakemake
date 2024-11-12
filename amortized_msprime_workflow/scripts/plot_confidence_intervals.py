@@ -6,13 +6,12 @@ from ts_simulators import *
 # track confidence interval of each parameter at each round and plot it againts number of rounds
 datadir = snakemake.params.datadir
 posteriordir = snakemake.params.posteriordir
+posteriorsubdir = snakemake.params.posteriorsubdir
 ts_processor = snakemake.params.ts_processor
 n_trains = snakemake.params.n_trains
 
 for j, n_train in enumerate(n_trains):
-
-
-    posterior_samples = np.load(f"{posteriordir}/{ts_processor}/n_train_{int(float(n_train))}/default_obs_samples.npy")
+    posterior_samples = np.load(os.path.join(posteriordir, posteriorsubdir, f"n_train_{int(float(n_train))}", "default_obs_samples.npy"))
     widths = []
     for i, param_samples in enumerate(posterior_samples.T):
         lower_bound = np.quantile(param_samples, 0.025)
@@ -24,7 +23,7 @@ for j, n_train in enumerate(n_trains):
         confidence_intervals = widths
     else:
         confidence_intervals = np.vstack((confidence_intervals, widths))
-np.save(f"{posteriordir}/{ts_processor}/confidence_intervals.npy", confidence_intervals)
+np.save(os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.npy"), confidence_intervals)
 
 
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
@@ -37,4 +36,4 @@ for i, param_samples in enumerate(posterior_samples.T):
 plt.legend()
 plt.xlabel("Number of simulations used for training NPE")
 plt.ylabel("Confidence Interval Width / Parameter Range")
-plt.savefig(f"{posteriordir}/{ts_processor}/confidence_intervals.png")
+plt.savefig(os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.png"))

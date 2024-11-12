@@ -10,7 +10,9 @@ from ts_processors import *
 from sbi import analysis
 
 datadir = snakemake.params.datadir
+datasubdir = snakemake.params.datasubdir
 posteriordir = snakemake.params.posteriordir
+posteriorsubdir = snakemake.params.posteriorsubdir
 ts_processor = snakemake.params.ts_processor
 n_train = snakemake.params.n_train
 
@@ -19,22 +21,22 @@ processor = PROCESSOR_LIST[ts_processor](snakemake)
     
 bounds = simulator.bounds
 
-with open(f"{posteriordir}/{ts_processor}/n_train_{n_train}/ensemble_posterior.pkl", "rb") as f:
+with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "ensemble_posterior.pkl"), "rb") as f:
     posterior = pickle.load(f)   
 
 # Sample posterior with test data as default
-n_boot = 1000 # number of test data
+n_boot = int(snakemake.params.n_boot) # number of test data
 n_sample = 1000
 posterior_samples = np.zeros((n_boot, n_sample, len(bounds)))
 truths = np.zeros((n_boot, len(bounds)))
 for i in range(n_boot):
-    x = np.load(os.path.join(datadir, ts_processor, f"test_x_{i}.npy"))
+    x = np.load(os.path.join(datadir, datasubdir, f"test_x_{i}.npy"))
     x = torch.from_numpy(x.reshape(1, *x.shape))
     theta = np.load(os.path.join(datadir, f"test_theta_{i}.npy"))
     truths[i] = theta
     posterior = posterior.set_default_x(x)
     posterior_samples[i] = posterior.sample((n_sample,)).numpy()
-np.save(f"{posteriordir}/{ts_processor}/n_train_{n_train}/posterior_samples_test.npy", posterior_samples)
+np.save(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "posterior_samples_test.npy"), posterior_samples)
 
 cmap = plt.get_cmap("plasma")
 fig, axs = plt.subplots(len(bounds), 1, sharey=True, sharex=True)
@@ -55,7 +57,7 @@ for i in range(len(bounds)):
     axs[i].text(0.98, 0.9, list(bounds.keys())[i], transform=axs[i].transAxes, horizontalalignment='right')
 fig.supylabel("(Quantile - true param value)")
 fig.supxlabel("Rank order true param value")
-plt.savefig(f"{posteriordir}/{ts_processor}/n_train_{n_train}/ci_rank_param.png")
+plt.savefig(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "ci_rank_param.png"))
 plt.clf()
 
 plt.figure(figsize=(10, 10))
@@ -65,6 +67,6 @@ plt.plot(1 - alpha_grid * 2, 1 - alpha_grid * 2, color="black", linestyle="--")
 plt.xlabel("Expected Coverage")
 plt.ylabel("Obseved Coverage")
 plt.legend()
-plt.savefig(f"{posteriordir}/{ts_processor}/n_train_{n_train}/posterior_coverage.png")
+plt.savefig(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "posterior_coverage.png"))
 
-np.save(f"{posteriordir}/{ts_processor}/n_train_{n_train}/observed_coverage.npy", coverage)
+np.save(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "observed_coverage.npy"), coverage)

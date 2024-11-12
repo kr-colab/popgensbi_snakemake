@@ -4,6 +4,6 @@ demog_model: "YRI_CEU"
 ts_processor: "tskit_jsfs"
 polarised: True
 embedding_net: "CNN"
-n_sims : 50000
-n_trains : [1e2, 3e2, 1e3, 3e3, 1e4, 3e4, 5e4]
-n_ensemble: 5 # number of ensemble members
+n_sims : 80000
+n_trains : [1e3, 3e3, 1e4, 3e4, 5e4, 8e4]
+n_ensemble: 10 # number of ensemble members

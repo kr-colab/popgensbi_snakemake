@@ -377,6 +377,31 @@ class moments_LD_stats(BaseProcessor):
         output /= self.n_avg
         return torch.from_numpy(output).float()
 
+import os
+import moments
+
+def get_ld_stats(seg_idx, datadir, ts_processor, ts, seg_len, randn, rec_map_file, popfile, pops, r_bins):
+    vcf_name = os.path.join(datadir, ts_processor, "{0}_seg_{1}.vcf".format(randn, seg_idx))
+    site_mask = np.ones(ts.num_sites, dtype=bool)
+    # unmask segments we want
+    for site in ts.sites():
+        if site.position > seg_idx * seg_len:
+            if site.position < (seg_idx + 1) * seg_len:
+                site_mask[site.id] = 0
+    with open(vcf_name, "w+") as fout:
+        ts.write_vcf(fout, site_mask=site_mask)
+    os.system(f"gzip {vcf_name}")
+    ld_stat = moments.LD.Parsing.compute_ld_statistics(
+        str(vcf_name)+'.gz',
+        rec_map_file=os.path.join(datadir, rec_map_file),
+        pop_file=os.path.join(datadir, popfile),
+        pops=pops,
+        r_bins=r_bins,
+        report=True)
+    os.system("rm " + str(vcf_name)+'.gz')
+    os.system("rm " + str(vcf_name)[:-3] + "h5")
+    return ld_stat
+
 class moments_LD_stats2(BaseProcessor):
     '''
     second version of LD stats processor. Uses moments.LD.Parsing.compute_ld_statistics
@@ -384,7 +409,7 @@ class moments_LD_stats2(BaseProcessor):
     params_default = {
         "rec_map_file":"rec_map_file.txt",
         "pop_file":"pop_file.txt",
-        "pops":["deme0, deme1"],
+        "pops":["deme0", "deme1"],
         "r_bins":[0, 1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3],
         "n_segs":100,
     }
@@ -392,45 +417,45 @@ class moments_LD_stats2(BaseProcessor):
         super().__init__(snakemake, moments_LD_stats2.params_default)
         self.datadir = snakemake.params.datadir
         self.ts_processor = snakemake.params.ts_processor
-        self.randn = np.random.randint(0, 10000)
+        self.randn = np.random.randint(0, 9999999)
 
     def __call__(self, ts):
         import moments
         import os
+        import multiprocessing
+        from functools import partial        
         # get the length of each segment
         seg_len = int(ts.sequence_length / self.n_segs)
-        ld_stats = {}
-        for i in range(self.n_segs):
-            vcf_name = os.path.join(self.datadir, self.ts_processor, "{0}_seg_{1}.vcf".format(self.randn, i))
-            site_mask = np.ones(ts.num_sites, dtype=bool)
-            # unmask segments we want
-            for site in ts.sites():
-                if site.position > i * seg_len:
-                    if site.position < (i + 1) * seg_len:
-                        site_mask[site.id] = 0
-            with open(vcf_name, "w+") as fout:
-                ts.write_vcf(fout, site_mask=site_mask)
-            os.system(f"gzip {vcf_name}")
-            ld_stats[i] = moments.LD.Parsing.compute_ld_statistics(
-                str(vcf_name)+'.gz',
-                rec_map_file=os.path.join(self.datadir, self.rec_map_file),
-                pop_file=os.path.join(self.datadir, self.pop_file),
-                pops=self.pops,
-                r_bins=self.r_bins,
-                report=False)
-            os.system("rm " + str(vcf_name)+'.gz')
-            os.system("rm " + str(vcf_name)[:-3] + "h5")
-        mv = moments.LD.Parsing.bootstrap_data(ld_stats)
+        partial_process = partial(get_ld_stats, 
+                datadir = self.datadir, 
+                ts_processor = self.ts_processor, 
+                ts = ts, 
+                seg_len = seg_len, 
+                randn = self.randn, 
+                rec_map_file = self.rec_map_file, 
+                popfile = self.pop_file, 
+                pops = self.pops, 
+                r_bins = self.r_bins)
+
+        from multiprocessing import Pool
+        args = list(range(self.n_segs))
+        # args = [(item,) for item in args]
+        p = Pool(10)
+        ld_stats = p.map(partial_process, args, chunksize=max(1, self.n_segs//10))
+        ld_stats_dict = {}
+        for i in range(len(ld_stats)):
+            ld_stats_dict[i] = ld_stats[i]
+        stats = ld_stats_dict[0]["stats"]
+        means = moments.LD.Parsing.means_from_region_data(ld_stats_dict, stats)
         output = []
-        for i in range(len(mv["means"])):
-            elems = mv["means"][i].flatten()
-            for j in range(len(elems)):
-                output.append(elems[j])
-        for i in range(len(mv["varcovs"])):
-            elems = mv["varcovs"][i].flatten()
-            for j in range(len(elems)):
-                output.append(elems[j])
-        output = np.array(output)
+        # will stack means of D2, Dz and pi2 and append replicate of H
+        for i in range(len(means)-1):
+            output.append(means[i])
+
+        rep = len(output[0])
+        for i in range(len(means[-1])):
+            output.append(np.repeat(means[-1][i], rep))
+        output = np.stack(output)
         return torch.from_numpy(output).float()
         
 

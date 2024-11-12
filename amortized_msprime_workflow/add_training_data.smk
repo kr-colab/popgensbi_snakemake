@@ -7,8 +7,8 @@ import os
 # Set up config
 configfile: "config/amortized_msprime/YRI_CEU_sfs.yaml"
 
-n_sims_start = 30000 # which index to start with (in case some training data still exists.)
-n_sims = 50000 # total number of simulations (i.e. n_sims - 1 is the highest index)
+n_sims_start = 50000 # which index to start with (in case some training data still exists.)
+n_sims = 80000 # total number of simulations (i.e. n_sims - 1 is the highest index)
 datadir = config["datadir"] # directory for training data
 ts_processor = config["ts_processor"] # name of the ts processor used
 
@@ -30,6 +30,8 @@ rule simulate_ts:
     params:
         num_simulations=lambda wildcards: wildcards.i,
         **{k: v for k, v in config.items()}
+    group:
+        "sim"
     script:
         "scripts/simulate_ts.py"
 
@@ -45,5 +47,7 @@ rule process_ts:
     params:
         num_simulations=lambda wildcards: wildcards.i,
         **{k: v for k, v in config.items()}
+    group:
+        "process"
     script:
         "scripts/process_ts.py"

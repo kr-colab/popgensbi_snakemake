@@ -6,10 +6,15 @@ from ts_simulators import *
 import numpy as np
 
 datadir = snakemake.params.datadir
-num_simulations = snakemake.params.num_simulations
+datasubdir = snakemake.params.datasubdir
 ts_processor = snakemake.params.ts_processor
+tsname = snakemake.params.tsname
+xname = snakemake.params.xname
 
-with open(f"{datadir}/{num_simulations}.trees", "rb") as ts_file:
+if not os.path.isdir(f"{datadir}/{datasubdir}"):
+    os.mkdir(f"{datadir}/{datasubdir}")
+
+with open(os.path.join(datadir, tsname), "rb") as ts_file:
     ts = tskit.load(ts_file)
 
 processor = PROCESSOR_LIST[ts_processor](snakemake)
@@ -17,4 +22,4 @@ processor = PROCESSOR_LIST[ts_processor](snakemake)
 x = processor(ts)
 # x is tensor, so change it to numpy first and save it as .npy
 x = x.squeeze().cpu().numpy()
-np.save(f"{datadir}/{ts_processor}/x_{num_simulations}.npy",x)
+np.save(os.path.join(datadir, datasubdir, xname), x)
