@@ -7,7 +7,6 @@ import numpy as np
 
 datadir = snakemake.params.datadir
 datasubdir = snakemake.params.datasubdir
-# num_simulations = snakemake.params.num_simulations
 ts_processor = snakemake.params.ts_processor
 tsname = snakemake.params.tsname
 xname = snakemake.params.xname

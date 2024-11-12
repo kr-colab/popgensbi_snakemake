@@ -13,8 +13,6 @@ from ts_processors import *
 datadir = snakemake.params.datadir
 tsname = snakemake.params.tsname
 thetaname = snakemake.params.thetaname
-# posteriordir = snakemake.params.posteriordir
-# num_simulations = snakemake.params.num_simulations
 
 if not os.path.isdir(f"{datadir}"):
     os.mkdir(f"{datadir}")

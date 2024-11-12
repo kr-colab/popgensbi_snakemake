@@ -31,6 +31,7 @@ else:
 rule all:
     input:
         os.path.join(datadir, "ts_star.trees"),
+        os.path.join(datadir, "theta_star.trees"),
         os.path.join(datadir, datasubdir, "x_obs.npy"),
         expand(os.path.join(datadir, "test_{r}.trees"), r=range(n_rep)),
         expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep)),
@@ -61,7 +62,8 @@ rule simulate_default_ts:
     message:
         "simulating with default thetas..."
     output:
-        os.path.join(datadir, "ts_star.trees")
+        os.path.join(datadir, "ts_star.trees"),
+        os.path.join(datadir, "theta_star.npy")
     log:
         "logs/simulate_default_ts.log"
     params:
