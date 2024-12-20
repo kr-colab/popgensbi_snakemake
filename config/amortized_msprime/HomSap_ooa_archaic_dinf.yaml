@@ -1,9 +1,0 @@
-datadir: "results/amortized_msprime/HomSap_ooa_archaic/data/"
-posteriordir: "results/amortized_msprime/HomSap_ooa_archaic/posterior/"
-demog_model: "HomSap_ooa_archaic_simulator"
-ts_processor: "dinf_multiple_pops"
-embedding_net: "ExchangeableCNN"
-n_sims_per_round : 10
-n_rounds : 2
-n_snps : 2000
-n_ensemble: 2 # number of ensemble members
