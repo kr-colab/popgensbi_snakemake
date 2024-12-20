@@ -1,5 +1,3 @@
-# Todo - consolidate simulate_ts and process_ts scripts
-# define outputfilename as a param so that the same simulate or process ts script can be used across all rules.
 import os
 
 # Set up config
@@ -31,7 +29,7 @@ else:
 rule all:
     input:
         os.path.join(datadir, "ts_star.trees"),
-        os.path.join(datadir, "theta_star.trees"),
+        os.path.join(datadir, "theta_star.npy"),
         os.path.join(datadir, datasubdir, "x_obs.npy"),
         expand(os.path.join(datadir, "test_{r}.trees"), r=range(n_rep)),
         expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep)),
@@ -205,7 +203,7 @@ rule plot_posterior:
     message: "visualizing learned posterior for training dataset size {wildcards.k}..."
     input: 
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"),
-        os.path.join(datadir, posteriorsubdir, "x_obs.npy"),
+        os.path.join(datadir, datasubdir, "x_obs.npy"),
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_samples.npy"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_corner.png")
@@ -235,7 +233,7 @@ rule plot_coverage_prob:
     message: "estimate coverage probability for posterior learned from {wildcards.k} sims"
     input:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"),
-        expand(os.path.join(datadir, posteriorsubdir, "test_x_{r}.npy"), r=range(n_rep)),
+        expand(os.path.join(datadir, datasubdir, "test_x_{r}.npy"), r=range(n_rep)),
         expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep))
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_samples_test.npy"),
@@ -256,7 +254,7 @@ rule run_sbc:
     message: "estimate coverage probability for posterior learned from {wildcards.k} sims"
     input:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"),
-        expand(os.path.join(datadir, posteriorsubdir, "test_x_{r}.npy"), r=range(n_rep)),
+        expand(os.path.join(datadir, datasubdir, "test_x_{r}.npy"), r=range(n_rep)),
         expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep))
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_stats.pkl"),
