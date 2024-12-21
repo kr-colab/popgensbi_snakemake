@@ -1,0 +1,23 @@
+executor: slurm
+jobs: 1000
+
+default-resources:
+  - slurm_partition=kerngpu,kern
+  - slurm_account=kernlab
+  - mem_mb=4000         # Default memory per job
+  - threads=1           # Default threads per job
+  - runtime=60          # Default runtime per job
+#default-resources:
+#  time: 300
+#  mem_mb: 12000
+#  threads: 1
+#restart-times: 3
+#max-jobs-per-second: 20
+#max-status-checks-per-second: 1
+#local-cores: 1
+#jobs: 1000
+#keep-going: True
+#rerun-incomplete: True
+#printshellcmds: True
+#scheduler: ilp
+#use-conda: True

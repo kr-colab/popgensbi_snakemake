@@ -1,7 +1,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/testing.yaml"
+configfile: "config/amortized_msprime/YRI_CEU_dinf_test.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -14,9 +14,9 @@ posteriorsubdir = config.get("posteriorsubdir", config["ts_processor"]) # name o
 ts_processor = config["ts_processor"] # name of the ts processor used
 
 if "datasubdir" in config:
-    datasubdir = config["datasubdir"] # name of the subdirectory for training data (default - name of the ts_processor used)
+    datasubdir = config["datasubdir"]
 else:
-    datasubdir = ts_processor
+    datasubdir = config["ts_processor"]
 if "posteriorsubdir" in config:
     posteriorsubdir = config["posteriorsubdir"]
 else:
@@ -25,6 +25,13 @@ if "n_rep_coverage" in config:
     n_rep = config["n_rep_coverage"]
 else:
     n_rep = 1000
+
+localrules: 
+    all,
+    process_ts,
+    process_test_ts,
+    process_default_ts,
+    plot_ci,
 
 rule all:
     input:
@@ -83,6 +90,7 @@ rule process_default_ts:
     params:
         tsname="ts_star.trees",
         xname="x_obs.npy",
+        datasubdir=datasubdir,
         **{k: v for k, v in config.items()}
     script:
         "scripts/process_ts.py"
@@ -118,6 +126,7 @@ rule process_ts:
         num_simulations=lambda wildcards: wildcards.i,
         tsname="{i}.trees",
         xname="x_{i}.npy",
+        datasubdir=datasubdir,
         **{k: v for k, v in config.items()}
     group:
         "process"
@@ -151,6 +160,7 @@ rule process_test_ts:
         num_simulations=lambda wildcards: wildcards.r,
         tsname="test_{r}.trees",
         xname="test_x_{r}.npy",
+        datasubdir=datasubdir,
         **{k: v for k, v in config.items()}
     group:
         "process_test"
@@ -170,13 +180,17 @@ rule train_npe:
     log:
         "logs/train_npe_n_train_{k}_rep_{e}.log"
     resources:
-        mem_mb="80000",
-        slurm_partition="gpu",
+        #mem_mb="25000",
+        slurm_partition="kerngpu,gpu",
         gpus=1,
-        #slurm_extra="--gres=gpu:nvidia_h100_80gb_hbm3:1"
+        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
+
+        #slurm_extra="--gres=gpu:1 --constraint=[nvidia_h100_80gb_hbm3|nvidia_a100-pcie-40gb|nvidia_a100_80gb_pcie]"
     params:
         n_train="{k}",
         ensemble="{e}",
+        datasubdir=datasubdir,
+        posteriorsubdir=posteriorsubdir,
         **{k: v for k, v in config.items()}
     script: "scripts/train_npe.py"
 
@@ -192,10 +206,11 @@ rule posterior_ensemble:
     resources:
         mem_mb="20000",
         gpus=1,
-        slurm_partition="gpu",
-        #slurm_extra="--gres=gpu:nvidia_h100_80gb_hbm3:1"
+        slurm_partition="gpu,kerngpu",
+        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
     params:
         n_train="{k}",
+        posteriorsubdir=posteriorsubdir,
         **{k: v for k, v in config.items()}
     script: "scripts/posterior_ensemble.py"
     
@@ -212,9 +227,11 @@ rule plot_posterior:
         mem_mb="5000",
         gpus=1,
         slurm_partition="gpu",
-        #slurm_extra="--gres=gpu:nvidia_h100_80gb_hbm3b:1"
+        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
     params:
         n_train=lambda wildcards: wildcards.k,
+        datasubdir=datasubdir,
+        posteriorsubdir=posteriorsubdir,
         **{k: v for k, v in config.items()}
     script: "scripts/plotting.py"
 
@@ -226,6 +243,7 @@ rule plot_ci:
         os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.npy"),
         os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.png")
     params:
+        posteriorsubdir=posteriorsubdir,
         **{k: v for k, v in config.items()}
     script: "scripts/plot_confidence_intervals.py"
 
@@ -243,10 +261,12 @@ rule plot_coverage_prob:
     resources:
         slurm_partition="gpu",
         gpus=1,
-        #slurm_extra="--gres=gpu:nvidia_h100_80gb_hbm3:1"
+        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
     params:
         n_train=lambda wildcards: wildcards.k,
         n_boot=n_rep,
+        datasubdir=datasubdir,
+        posteriorsubdir=posteriorsubdir,
         **{k: v for k, v in config.items()}
     script: "scripts/coverage_prob.py"
 
@@ -263,11 +283,14 @@ rule run_sbc:
     resources:
         mem_mb="10000",
         gpus=1,
-        slurm_partition="gpu",
-        #slurm_extra="--gres=gpu:nvidia_h100_80gb_hbm3:1"
+        slurm_partition="gpu,kerngpu",
+        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
     params:
         n_train=lambda wildcards: wildcards.k,
         n_boot=n_rep,
+        datasubdir=datasubdir,
+        posteriorsubdir=posteriorsubdir,
+        device="cuda:0",
         **{k: v for k, v in config.items()}
     script: "scripts/run_sbc.py"
 
