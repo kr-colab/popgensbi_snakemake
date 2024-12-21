@@ -16,7 +16,7 @@ To run amoritzed msprime workflow on talapas (HPC at UOregon), run `snakemake --
 
 note:
 The profile used in the workflow assumes snakemake version 8.X. If you are using a different version, you may have to change the profile.
-An example profile is provided in `my_profile/config.yaml`.
+An example profile is provided in `example_profile/config.yaml`.
 
 This workflow uses msprime to simulate a demographic model, saves tree sequences, process them so that it can be used as input data to train neural posterior estimator, and visualize joint posterior. The config file called in line 5 of `main_workflow.smk` defines, number of simulations per round, number of rounds, number of repeated NPE training per round for ensemble learning, data directory to save tree sequences, posterior directory to save posteriors and plots. In addition, a config file should specify the name of a demographic model, ts (tree sequence) processor, and embedding network. Check out `ts_simulators.py` for a list of demographic models, `ts_processors.py` for ts processors, and `embedding_networks.py` for networks. Depending on the object, there can be more paramters that you can specify in config and override default values. (e.g. number of SNPs to use for feature matrix, if you are using dinf's feature matrix as a ts processor). You can change line 5 to use any yaml file in `config/amortized_msprime/`.
 
