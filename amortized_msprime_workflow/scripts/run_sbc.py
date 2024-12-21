@@ -20,6 +20,9 @@ n_train = snakemake.params.n_train
 simulator = MODEL_LIST[snakemake.params.demog_model](snakemake)
 processor = PROCESSOR_LIST[ts_processor](snakemake)
 
+# Set up device
+device = torch.device(snakemake.params.device if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "ensemble_posterior.pkl"), "rb") as f:
     posterior = pickle.load(f)   
@@ -38,6 +41,14 @@ xs = torch.stack(xs)
 print(xs.shape)
 thetas = torch.stack(thetas)
 print(thetas.shape)
+
+# move tensors to device
+xs = xs.to(device)
+thetas = thetas.to(device)
+# print to make sure they are on the device
+print(f"xs device: {xs.device}")
+print(f"thetas device: {thetas.device}")
+
 num_posterior_samples = 1_000
 ranks, dap_samples = run_sbc(
     thetas, xs, posterior, num_posterior_samples=num_posterior_samples

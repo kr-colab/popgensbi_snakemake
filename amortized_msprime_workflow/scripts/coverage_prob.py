@@ -35,7 +35,7 @@ for i in range(n_boot):
     theta = np.load(os.path.join(datadir, f"test_theta_{i}.npy"))
     truths[i] = theta
     posterior = posterior.set_default_x(x)
-    posterior_samples[i] = posterior.sample((n_sample,)).numpy()
+    posterior_samples[i] = posterior.sample((n_sample,)).cpu().numpy()
 np.save(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "posterior_samples_test.npy"), posterior_samples)
 
 cmap = plt.get_cmap("plasma")
