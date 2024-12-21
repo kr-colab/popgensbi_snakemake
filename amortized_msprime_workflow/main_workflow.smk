@@ -28,26 +28,47 @@ else:
 
 localrules: 
     all,
+    simulate_all,
+    simulate_test_all,
+    process_all,
+    train_all,
+    analyze_all,
     process_ts,
     process_test_ts,
     process_default_ts,
     plot_ci,
+    process_ts_batch,
+    process_test_ts_batch
 
-rule all:
+BATCH_SIZE = 10  # Adjust based on your needs and memory constraints
+TEST_BATCH_SIZE = 10  # Adjust based on your needs
+
+rule simulate_all:
+    input:
+        expand(os.path.join(datadir, "batch_{batch}", "sims.done"), 
+               batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE))
+
+rule simulate_test_all:
     input:
         os.path.join(datadir, "ts_star.trees"),
         os.path.join(datadir, "theta_star.npy"),
+        expand(os.path.join(datadir, "test_batch_{batch}", "test_sims.done"), 
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE))
+
+rule process_all:
+    input:
         os.path.join(datadir, datasubdir, "x_obs.npy"),
-        expand(os.path.join(datadir, "test_{r}.trees"), r=range(n_rep)),
-        expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep)),
-        expand(os.path.join(datadir, datasubdir, "test_x_{r}.npy"), r=range(n_rep)),
-        expand(os.path.join(datadir, "{i}.trees"), i=range(n_sims)),
-        expand(os.path.join(datadir, "theta_{i}.npy"), i=range(n_sims)),
-        expand(os.path.join(datadir, datasubdir, "x_{i}.npy"), i=range(n_sims)),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"), k=n_trains, e=range(n_ensemble)),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_estimator_rep_{e}.pkl"), k=n_trains, e=range(n_ensemble)),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "inference_rep_{e}.pkl"), k=n_trains, e=range(n_ensemble)),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"), k=n_trains),
+        expand(os.path.join(datadir, datasubdir, "batch_{batch}/features.done"), 
+               batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE)),
+        expand(os.path.join(datadir, datasubdir, "test_batch_{batch}/test_features.done"),
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE))
+
+rule train_all:
+    input:
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"), k=n_trains)
+
+rule analyze_all:
+    input:
         expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_samples.npy"), k=n_trains),
         expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_corner.png"), k=n_trains),
         os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.png"),
@@ -58,10 +79,15 @@ rule all:
         expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ci_rank_param.png"), k=n_trains),
         expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_stats.pkl"), k=n_trains),
         expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_hist.png"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_cdf.png"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_cdf.png"), k=n_trains)
 
-wildcard_constraints:
-    i="\d+"
+rule all:
+    input:
+        rules.simulate_all.input,
+        rules.simulate_test_all.input,
+        rules.process_all.input,
+        rules.train_all.input,
+        rules.analyze_all.input
 
 rule simulate_default_ts:
     message:
@@ -95,84 +121,52 @@ rule process_default_ts:
     script:
         "scripts/process_ts.py"
 
-rule simulate_ts:
+rule simulate_ts_batch:
     message:
-        "simulating {wildcards.i}-th ts..."
+        "simulating batch {wildcards.batch} of tree sequences..."
     output:
-        os.path.join(datadir, "{i}.trees"),
-        os.path.join(datadir, "theta_{i}.npy"),
-    log:
-        "logs/simulate_ts_{i}.log"
+        trees = os.path.join(datadir, "batch_{batch}", "sims.done")
     params:
-        num_simulations=lambda wildcards: wildcards.i,
-        tsname="{i}.trees",
-        thetaname="theta_{i}.npy",
+        batch_id = lambda wildcards: int(wildcards.batch),
+        batch_size = BATCH_SIZE,
         **{k: v for k, v in config.items()}
     group:
         "sim"
+    resources:
+        mem_mb = 16000,
+        time = "2:00:00"
     script:
-        "scripts/simulate_ts.py"
+        "scripts/simulate_ts_batch.py"
 
-rule process_ts:
+rule process_ts_batch:
     message:
-        "process {wildcards.i}-th ts..."
+        "processing batch {wildcards.batch} of tree sequences..."
     input:
-        os.path.join(datadir, "{i}.trees")
+        os.path.join(datadir, "batch_{batch}", "sims.done")
     output:
-        os.path.join(datadir, datasubdir, "x_{i}.npy")
+        done = os.path.join(datadir, datasubdir, "batch_{batch}", "features.done")
     log:
-        "logs/process_ts_{i}.log"
+        os.path.join("logs", "process_ts_batch_{batch}.log")
     params:
-        num_simulations=lambda wildcards: wildcards.i,
-        tsname="{i}.trees",
-        xname="x_{i}.npy",
-        datasubdir=datasubdir,
+        batch_id = lambda wildcards: int(wildcards.batch),
+        batch_size = BATCH_SIZE,
+        datasubdir = datasubdir,
         **{k: v for k, v in config.items()}
-    group:
-        "process"
-    script:
-        "scripts/process_ts.py"
-
-rule simulate_test_ts:
-    message:
-        "simulate {wildcards.r}-th ts for coverage test..."
-    output:
-        os.path.join(datadir, "test_{r}.trees"),
-        os.path.join(datadir, "test_theta_{r}.npy")
-    params:
-        num_simulations=lambda wildcards: wildcards.r,
-        tsname="test_{r}.trees",
-        thetaname="test_theta_{r}.npy",
-        **{k: v for k, v in config.items()}
-    group:
-        "sim_test"
-    script:
-        "scripts/simulate_ts.py"
-
-rule process_test_ts:
-    message:
-        "process {wildcards.r}-th ts for coverage test..."
-    input:
-        os.path.join(datadir, "test_{r}.trees")
-    output:
-        os.path.join(datadir, datasubdir, "test_x_{r}.npy")
-    params:
-        num_simulations=lambda wildcards: wildcards.r,
-        tsname="test_{r}.trees",
-        xname="test_x_{r}.npy",
-        datasubdir=datasubdir,
-        **{k: v for k, v in config.items()}
-    group:
-        "process_test"
-    script:
-        "scripts/process_ts.py"
+    group: "process"
+    resources:
+        mem_mb = 4000,
+        time = "1:00:00"
+    script: "scripts/process_ts_batch.py"
 
 rule train_npe:
     message:
         "training neural posterior estimators with {wildcards.k} data points rep {wildcards.e}..."
     input:
-        lambda wildcards: expand(os.path.join(datadir, datasubdir, "x_{l}.npy"), l=range(int(wildcards.k))),
-        lambda wildcards: expand(os.path.join(datadir, "theta_{l}.npy"), l=range(int(wildcards.k)))
+        # Calculate how many batches we need for k training samples
+        sim_markers = lambda w: [os.path.join(datadir, f"batch_{b}", "sims.done") 
+                               for b in range((int(w.k) + BATCH_SIZE - 1) // BATCH_SIZE)],
+        feature_markers = lambda w: [os.path.join(datadir, datasubdir, f"batch_{b}", "features.done") 
+                                   for b in range((int(w.k) + BATCH_SIZE - 1) // BATCH_SIZE)]
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_estimator_rep_{e}.pkl"),
@@ -180,12 +174,9 @@ rule train_npe:
     log:
         "logs/train_npe_n_train_{k}_rep_{e}.log"
     resources:
-        #mem_mb="25000",
         slurm_partition="kerngpu,gpu",
         gpus=1,
         slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
-
-        #slurm_extra="--gres=gpu:1 --constraint=[nvidia_h100_80gb_hbm3|nvidia_a100-pcie-40gb|nvidia_a100_80gb_pcie]"
     params:
         n_train="{k}",
         ensemble="{e}",
@@ -198,7 +189,8 @@ rule posterior_ensemble:
     message:
         "creating an ensemble posterior for training data size {wildcards.k}"
     input:
-        lambda wildcards: expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"), e=range(n_ensemble), k=[wildcards.k])
+        lambda wildcards: expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"), 
+                               e=range(n_ensemble), k=[wildcards.k])
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl")
     log:
@@ -251,8 +243,10 @@ rule plot_coverage_prob:
     message: "estimate coverage probability for posterior learned from {wildcards.k} sims"
     input:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"),
-        expand(os.path.join(datadir, datasubdir, "test_x_{r}.npy"), r=range(n_rep)),
-        expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep))
+        expand(os.path.join(datadir, datasubdir, "test_batch_{batch}/test_features.done"),
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE)),
+        expand(os.path.join(datadir, "test_batch_{batch}/test_sims.done"),
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE))
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_samples_test.npy"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ci_rank_param.png"),
@@ -274,8 +268,10 @@ rule run_sbc:
     message: "estimate coverage probability for posterior learned from {wildcards.k} sims"
     input:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"),
-        expand(os.path.join(datadir, datasubdir, "test_x_{r}.npy"), r=range(n_rep)),
-        expand(os.path.join(datadir, "test_theta_{r}.npy"), r=range(n_rep))
+        expand(os.path.join(datadir, datasubdir, "test_batch_{batch}/test_features.done"),
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE)),
+        expand(os.path.join(datadir, "test_batch_{batch}/test_sims.done"),
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE))
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_stats.pkl"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_hist.png"),
@@ -293,6 +289,43 @@ rule run_sbc:
         device="cuda:0",
         **{k: v for k, v in config.items()}
     script: "scripts/run_sbc.py"
+
+rule simulate_test_ts_batch:
+    message:
+        "simulate batch {wildcards.batch} of test tree sequences..."
+    output:
+        trees = os.path.join(datadir, "test_batch_{batch}", "test_sims.done")
+    params:
+        batch_id = lambda wildcards: int(wildcards.batch),
+        batch_size = TEST_BATCH_SIZE,
+        **{k: v for k, v in config.items()}
+    group:
+        "sim_test"
+    resources:
+        mem_mb = 16000,
+        time = "2:00:00"
+    script:
+        "scripts/simulate_test_ts_batch.py"
+
+rule process_test_ts_batch:
+    message:
+        "processing batch {wildcards.batch} of test tree sequences..."
+    input:
+        os.path.join(datadir, "test_batch_{batch}", "test_sims.done")
+    output:
+        done = os.path.join(datadir, datasubdir, "test_batch_{batch}", "test_features.done")
+    log:
+        "logs/process_test_ts_batch_{batch}.log"
+    params:
+        batch_id = lambda wildcards: int(wildcards.batch),
+        batch_size = TEST_BATCH_SIZE,
+        datasubdir = datasubdir,
+        **{k: v for k, v in config.items()}
+    group: "process_test"
+    resources:
+        mem_mb = 4000,
+        time = "1:00:00"
+    script: "scripts/process_ts_batch.py"
 
 
 

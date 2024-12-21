@@ -1,5 +1,5 @@
 executor: slurm
-jobs: 1000
+jobs: 10000
 
 default-resources:
   - slurm_partition=kerngpu,kern
@@ -13,11 +13,11 @@ default-resources:
 #  threads: 1
 #restart-times: 3
 #max-jobs-per-second: 20
-#max-status-checks-per-second: 1
-#local-cores: 1
+max-status-checks-per-second: 120
+local-cores: 2
 #jobs: 1000
 #keep-going: True
-#rerun-incomplete: True
-#printshellcmds: True
+rerun-incomplete: True
+printshellcmds: True
 #scheduler: ilp
-#use-conda: True
+use-conda: True
