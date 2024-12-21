@@ -32,7 +32,6 @@ localrules:
     process_test_ts,
     process_default_ts,
     plot_ci,
-    plot_coverage_prob,
 
 rule all:
     input:
