@@ -33,8 +33,6 @@ localrules:
     process_all,
     train_all,
     analyze_all,
-    process_ts,
-    process_test_ts,
     process_default_ts,
     plot_ci,
     process_ts_batch,
