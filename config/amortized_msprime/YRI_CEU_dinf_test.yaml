@@ -3,8 +3,10 @@ posteriordir: "results/amortized_msprime/YRI_CEU/posterior/"
 demog_model: "YRI_CEU"
 ts_processor: "dinf_multiple_pops"
 embedding_net: "ExchangeableCNN_OG"
-n_sims : 200
-n_trains : [120, 120]
+n_sims : 512
+n_trains : [512]
 n_snps : 500
 n_ensemble: 10 # number of ensemble members
 n_rep_coverage: 100
+train_npe:
+  batch_size: 256 # batch size for training
