@@ -1,7 +1,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/YRI_CEU_dinf_test.yaml"
+configfile: "config/amortized_msprime/YRI_CEU_dinf.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -35,8 +35,8 @@ localrules:
     analyze_all,
     process_default_ts,
     plot_ci,
-    process_ts_batch,
-    process_test_ts_batch
+    #process_ts_batch,
+    #process_test_ts_batch
 
 BATCH_SIZE = 10  # Adjust based on your needs and memory constraints
 TEST_BATCH_SIZE = 10  # Adjust based on your needs
@@ -172,9 +172,12 @@ rule train_npe:
     log:
         "logs/train_npe_n_train_{k}_rep_{e}.log"
     resources:
+        runtime = "2h",
+        mem_mb = 25000,
+        threads=10,
         slurm_partition="kerngpu,gpu",
         gpus=1,
-        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
+        slurm_extra="--gres=gpu:1 --constraint=gpu-80gb"
     params:
         n_train="{k}",
         ensemble="{e}",
@@ -197,7 +200,7 @@ rule posterior_ensemble:
         mem_mb="20000",
         gpus=1,
         slurm_partition="gpu,kerngpu",
-        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
+        slurm_extra="--gres=gpu:1 --constraint=a100"
     params:
         n_train="{k}",
         posteriorsubdir=posteriorsubdir,
@@ -217,7 +220,7 @@ rule plot_posterior:
         mem_mb="5000",
         gpus=1,
         slurm_partition="gpu",
-        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
+        slurm_extra="--gres=gpu:1 --constraint=a100"
     params:
         n_train=lambda wildcards: wildcards.k,
         datasubdir=datasubdir,
@@ -251,9 +254,9 @@ rule plot_coverage_prob:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_coverage.png"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "observed_coverage.npy")
     resources:
-        slurm_partition="gpu",
+        slurm_partition="kerngpu,gpu",
         gpus=1,
-        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
+        slurm_extra="--gres=gpu:1 --constraint=a100"
     params:
         n_train=lambda wildcards: wildcards.k,
         n_boot=n_rep,

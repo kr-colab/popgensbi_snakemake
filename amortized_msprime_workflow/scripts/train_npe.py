@@ -1,5 +1,7 @@
 import os
 import pickle
+import multiprocessing as mp
+from functools import partial
 
 from embedding_networks import *
 from ts_simulators import *
@@ -18,15 +20,59 @@ else:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-def load_data_files(data_dir, datasubdir, n_train):
+def load_file_worker(file_path, mmap_mode='r'):
+    """Worker function to load a single file"""
+    return np.load(file_path, mmap_mode=mmap_mode)
+
+def load_data_files(data_dir, datasubdir, n_train, batch_size=1000, num_workers=4):
+    """
+    Load data files efficiently using memory mapping, batch processing, and parallel loading.
+    
+    Args:
+        data_dir: Directory containing the data files
+        datasubdir: Subdirectory for x files
+        n_train: Number of training samples to load
+        batch_size: Size of batches to load at once
+        num_workers: Number of parallel workers for loading files
+    """
     n_train = int(n_train)
-    xs = []
-    thetas = []
-    for n in range(n_train):
-        xs.append(np.load(os.path.join(data_dir, datasubdir, f"x_{n}.npy")))
-        thetas.append(np.load(os.path.join(data_dir, f"theta_{n}.npy")))
-    xs = torch.from_numpy(np.array(xs)).to(torch.float32).to(device)
-    thetas = torch.from_numpy(np.array(thetas)).to(torch.float32).to(device)
+    
+    # First, memory map all files to get shapes without loading
+    first_x = np.load(os.path.join(data_dir, datasubdir, "x_0.npy"), mmap_mode='r')
+    first_theta = np.load(os.path.join(data_dir, "theta_0.npy"), mmap_mode='r')
+    
+    # Pre-allocate tensors
+    xs = torch.empty((n_train, *first_x.shape), dtype=torch.float32, device=device)
+    thetas = torch.empty((n_train, *first_theta.shape), dtype=torch.float32, device=device)
+    
+    # Initialize process pool
+    with mp.Pool(num_workers) as pool:
+        # Load data in batches
+        for start_idx in range(0, n_train, batch_size):
+            end_idx = min(start_idx + batch_size, n_train)
+            batch_indices = range(start_idx, end_idx)
+            
+            # Prepare file paths for this batch
+            x_paths = [os.path.join(data_dir, datasubdir, f"x_{i}.npy") for i in batch_indices]
+            theta_paths = [os.path.join(data_dir, f"theta_{i}.npy") for i in batch_indices]
+            
+            # Load files in parallel
+            x_batch_arrays = pool.map(partial(load_file_worker, mmap_mode='r'), x_paths)
+            theta_batch_arrays = pool.map(partial(load_file_worker, mmap_mode='r'), theta_paths)
+            
+            # Stack arrays and convert to tensors
+            x_batch = np.stack(x_batch_arrays)
+            theta_batch = np.stack(theta_batch_arrays)
+            
+            # Transfer to device
+            xs[start_idx:end_idx] = torch.from_numpy(x_batch).to(torch.float32)
+            thetas[start_idx:end_idx] = torch.from_numpy(theta_batch).to(torch.float32)
+            
+            # Force garbage collection after each batch
+            del x_batch, theta_batch, x_batch_arrays, theta_batch_arrays
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+    
     return thetas, xs
 
 
