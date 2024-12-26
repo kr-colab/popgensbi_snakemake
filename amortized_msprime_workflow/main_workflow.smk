@@ -172,7 +172,7 @@ rule train_npe:
     log:
         "logs/train_npe_n_train_{k}_rep_{e}.log"
     resources:
-        runtime = "2h",
+        runtime = "3h",
         mem_mb = 25000,
         threads=10,
         slurm_partition="kerngpu,gpu",
