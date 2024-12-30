@@ -1,0 +1,65 @@
+# -- NOT WORKING YET --
+seed: 1024                                        # random seed
+path: "/sietch_colab/natep/popgensbi/debug-dinf"  # write stuff here
+cpus: 100                                         # number of CPUs for simulation
+snps: "all"                                       # number of snps to use
+sequence-length: 10000000
+
+samples:                                          # samples per pop
+  CEU: 10
+  YRI: 10
+
+reps:                                             # number of replicates
+  train: 5000
+  val: 1000
+  test: 1000
+
+model:                                            # neural network stuff
+  prefix: "rnn"
+  optimizer: "AdamW"
+  batch-size: 32
+  learning-rate: 0.0001
+  max-epochs: 1000
+
+prior:                                            # prior, arguments to np.random.Generator
+  N_A:
+    func: "uniform"
+    args:
+      low: 10000.0
+      high: 10000.0
+
+  N_YRI:
+    func: "uniform"
+    args:
+      low: 100.0
+      high: 100000.0
+
+  N_CEU_initial:
+    func: "uniform"
+    args:
+      low: 100.0
+      high: 100000.0
+
+  N_CEU_final:
+    func: "uniform"
+    args:
+      low: 100.0
+      high: 100000.0
+
+  m:
+    func: "uniform"
+    args:
+      low: 0.0
+      high: 0.0005
+
+  Tp:
+    func: "uniform"
+    args:
+      low: 0.0
+      high: 60000.0
+
+  T:
+    func: "uniform"
+    args:
+      low: 0.0
+      high: 60000.0
