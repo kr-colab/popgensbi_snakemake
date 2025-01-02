@@ -122,7 +122,7 @@ if __name__ == "__main__":
         num_workers=args.cpus,
     )
     
-    # lightning wrapper
+    # feature embedding
     class Model(LightningModule):
         def __init__(self):
             super().__init__()
@@ -133,7 +133,6 @@ if __name__ == "__main__":
             embedding = self.model.embedding(features)
             return embedding, target
 
-    # feature embedding
     model = Model()
     trainer = Trainer(
         accelerator='cuda',
@@ -170,21 +169,19 @@ if __name__ == "__main__":
         normalizing_flow_density_estimator = posterior_nn(
             model="maf_rqs",
             z_score_x="none",
-            #embedding_net=embedding_net
         )
         log_dir = os.path.join(sbi_path, "logs")
         writer = SummaryWriter(log_dir=log_dir)
         inference = SNPE(
             prior=prior,
             density_estimator=normalizing_flow_density_estimator,
-            device="cpu", #model.device(),
+            device="cpu",
             show_progress_bars=True,
             summary_writer=writer,
         )
         inference = inference.append_simulations(
             thetas,
             xs, 
-            #proposal=prior,
         )
         estimator = inference.train(
             show_train_summary=True,
@@ -279,3 +276,43 @@ if __name__ == "__main__":
     fig.supylabel("Posterior width / prior width")
     plt.savefig(os.path.join(sbi_path, "test-posterior-concentration.png"))
     plt.clf()
+
+    #sanity check: look at bivariate marginals for test instance closest to prior mean
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sbi import analysis
+
+    def contour_at_point(z, path):
+        scaled_thetas = (test_thetas - prior.mean.unsqueeze(0)) / prior.stddev.unsqueeze(0)
+        at_prior_mean = (scaled_thetas - z).pow(2).sum(dim=1).argmin().item()
+        samples_at_prior_mean = posterior.sample([1000], x=test_xs[at_prior_mean], show_progress_bars=False)
+        parameter_names = ["N_A", "N_YRI", "N_CEU_1", "N_CEU_2", "m", "T", "Tp"]
+        fig, axs = plt.subplots(np.sum(keep), np.sum(keep), figsize=(10, 10))
+        for i, ii in enumerate(np.flatnonzero(keep)):
+            for j, jj in enumerate(np.flatnonzero(keep)):
+                if i == j:
+                    sns.kdeplot(x=samples_at_prior_mean[:, i], ax=axs[i, j])
+                    axs[i, j].axvline(x=test_thetas[at_prior_mean].numpy()[i], color="black")
+                    axs[i, j].set_xlim(low[ii], high[ii])
+                    axs[i, j].set_yticks([], [])
+                    axs[i, j].set_ylabel("")
+                    axs[i, j].set_xticks([low[ii], high[ii]], [low[ii], high[ii]])
+                    axs[i, j].set_xlabel(parameter_names[ii])
+                elif j > i:
+                    sns.kdeplot(x=samples_at_prior_mean[:, j], y=samples_at_prior_mean[:, i], ax=axs[i, j], levels=[0.25, 0.5, 0.75])
+                    axs[i, j].plot(test_thetas[at_prior_mean].numpy()[j], test_thetas[at_prior_mean].numpy()[i], "o", color="black")
+                    axs[i, j].set_xlim(low[jj], high[jj])
+                    axs[i, j].set_ylim(low[ii], high[ii])
+                    axs[i, j].set_xticks([], [])
+                    axs[i, j].set_xlabel("")
+                    axs[i, j].set_yticks([], [])
+                    axs[i, j].set_ylabel("")
+                else:
+                    axs[i, j].set_axis_off()
+        plt.savefig(path)
+        plt.clf()
+
+    contour_at_point(torch.zeros_like(prior.mean.unsqueeze(0)), os.path.join(sbi_path, "test-posterior-at-prior-mean-contour.png"))
+    contour_at_point(torch.full_like(prior.mean.unsqueeze(0), -2), os.path.join(sbi_path, "test-posterior-at-prior-low-contour.png"))
+    contour_at_point(torch.full_like(prior.mean.unsqueeze(0), 2), os.path.join(sbi_path, "test-posterior-at-prior-high-contour.png"))
+
