@@ -21,8 +21,26 @@ processor = PROCESSOR_LIST[ts_processor](snakemake)
     
 bounds = simulator.bounds
 
+# Set up device and debug info
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"CUDA device count: {torch.cuda.device_count()}")
+if torch.cuda.is_available():
+    print(f"Current CUDA device: {torch.cuda.current_device()}")
+    print(f"CUDA device name: {torch.cuda.get_device_name(0)}")
+
+device = torch.device(snakemake.params.device)
+print(f"Using device: {device}")
+print(f"Device type: {device.type}")
+
 with open(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "ensemble_posterior.pkl"), "rb") as f:
     posterior = pickle.load(f)   
+
+# Move neural networks to device
+for i, p in enumerate(posterior.posteriors):
+    p.posterior_estimator.to(device)
+    print(f"Posterior {i} network device: {next(p.posterior_estimator.parameters()).device}")
+
+print(f"Moved posterior neural networks to {device}")
 
 # Sample posterior with test data as default
 n_boot = int(snakemake.params.n_boot) # number of test data
@@ -31,11 +49,12 @@ posterior_samples = np.zeros((n_boot, n_sample, len(bounds)))
 truths = np.zeros((n_boot, len(bounds)))
 for i in range(n_boot):
     x = np.load(os.path.join(datadir, datasubdir, f"test_x_{i}.npy"))
-    x = torch.from_numpy(x.reshape(1, *x.shape))
+    x = torch.from_numpy(x.reshape(1, *x.shape)).to(device)
     theta = np.load(os.path.join(datadir, f"test_theta_{i}.npy"))
     truths[i] = theta
     posterior = posterior.set_default_x(x)
-    posterior_samples[i] = posterior.sample((n_sample,)).cpu().numpy()
+    samples = posterior.sample((n_sample,))
+    posterior_samples[i] = samples.cpu().numpy()
 np.save(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "posterior_samples_test.npy"), posterior_samples)
 
 cmap = plt.get_cmap("plasma")

@@ -1,7 +1,7 @@
 import os
 
 # Set up config
-configfile: "config/amortized_msprime/YRI_CEU_dinf.yaml"
+configfile: "config/amortized_msprime/YRI_CEU_dinf_test_bigger.yaml"
 
 n_sims = config["n_sims"] # number of simulations
 n_ensemble = config["n_ensemble"] # number of times repeat SNPE training for ensemble learning
@@ -29,63 +29,28 @@ else:
 localrules: 
     all,
     simulate_all,
-    simulate_test_all,
     process_all,
     train_all,
     analyze_all,
-    process_default_ts,
+    #process_default_ts,
     plot_ci,
     #process_ts_batch,
     #process_test_ts_batch
 
-BATCH_SIZE = 10  # Adjust based on your needs and memory constraints
-TEST_BATCH_SIZE = 10  # Adjust based on your needs
+BATCH_SIZE = 100  # Adjust based on your needs and memory constraints
+TEST_BATCH_SIZE = 100  # Adjust based on your needs
 
 rule simulate_all:
     input:
+        # Training simulations
         expand(os.path.join(datadir, "batch_{batch}", "sims.done"), 
-               batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE))
-
-rule simulate_test_all:
-    input:
-        os.path.join(datadir, "ts_star.trees"),
-        os.path.join(datadir, "theta_star.npy"),
-        expand(os.path.join(datadir, "test_batch_{batch}", "test_sims.done"), 
-               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE))
-
-rule process_all:
-    input:
-        os.path.join(datadir, datasubdir, "x_obs.npy"),
-        expand(os.path.join(datadir, datasubdir, "batch_{batch}/features.done"), 
                batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE)),
-        expand(os.path.join(datadir, datasubdir, "test_batch_{batch}/test_features.done"),
-               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE))
-
-rule train_all:
-    input:
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"), k=n_trains)
-
-rule analyze_all:
-    input:
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_samples.npy"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_corner.png"), k=n_trains),
-        os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.png"),
-        os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.npy"),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_coverage.png"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "observed_coverage.npy"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_samples_test.npy"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ci_rank_param.png"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_stats.pkl"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_hist.png"), k=n_trains),
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_cdf.png"), k=n_trains)
-
-rule all:
-    input:
-        rules.simulate_all.input,
-        rules.simulate_test_all.input,
-        rules.process_all.input,
-        rules.train_all.input,
-        rules.analyze_all.input
+        # Test simulations
+        expand(os.path.join(datadir, "test_batch_{batch}", "test_sims.done"), 
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE)),
+        # Default simulation
+        os.path.join(datadir, "ts_star.trees"),
+        os.path.join(datadir, "theta_star.npy")
 
 rule simulate_default_ts:
     message:
@@ -102,22 +67,47 @@ rule simulate_default_ts:
     script:
         "scripts/simulate_ts.py"
 
-rule process_default_ts:
-    message:
-        "getting summary stats from default tree sequences..."
+rule process_all:
     input:
-        os.path.join(datadir, "ts_star.trees")
-    output:
-        os.path.join(datadir, datasubdir, "x_obs.npy")
-    log:
-        "logs/process_default_ts.log"
-    params:
-        tsname="ts_star.trees",
-        xname="x_obs.npy",
-        datasubdir=datasubdir,
-        **{k: v for k, v in config.items()}
-    script:
-        "scripts/process_ts.py"
+        sims=expand(os.path.join(datadir, "batch_{batch}", "sims.done"),
+                   batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE)),
+        test_sims=expand(os.path.join(datadir, "test_batch_{batch}", "test_sims.done"),
+                        batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE)),
+        default_sim=[os.path.join(datadir, "ts_star.trees"),
+                    os.path.join(datadir, "theta_star.npy")],
+        obs=os.path.join(datadir, datasubdir, "x_obs.npy"),
+        features=expand(os.path.join(datadir, datasubdir, "batch_{batch}/features.done"), 
+               batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE)),
+        test_features=expand(os.path.join(datadir, datasubdir, "test_batch_{batch}/test_features.done"),
+               batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE)),
+        train_zarr=os.path.join(datadir, datasubdir, "train.zarr"),
+        test_zarr=os.path.join(datadir, datasubdir, "test.zarr")
+
+rule train_all:
+    input:
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"), k=n_trains)
+
+rule analyze_all:
+    input:
+        rules.train_all.input,
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_samples.npy"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_corner.png"), k=n_trains),
+        os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.png"),
+        os.path.join(posteriordir, posteriorsubdir, "confidence_intervals.npy"),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_coverage.png"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "observed_coverage.npy"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_samples_test.npy"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ci_rank_param.png"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_stats.pkl"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_hist.png"), k=n_trains),
+        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "sbc_rank_cdf.png"), k=n_trains)
+
+rule all:
+    input:
+        rules.simulate_all.input,
+        rules.process_all.input,
+        rules.train_all.input,
+        rules.analyze_all.input
 
 rule simulate_ts_batch:
     message:
@@ -140,51 +130,53 @@ rule process_ts_batch:
     message:
         "processing batch {wildcards.batch} of tree sequences..."
     input:
-        os.path.join(datadir, "batch_{batch}", "sims.done")
+        rules.simulate_ts_batch.output
     output:
         done = os.path.join(datadir, datasubdir, "batch_{batch}", "features.done")
     log:
         os.path.join("logs", "process_ts_batch_{batch}.log")
+    group: "process"
+    resources:
+        mem_mb = 4000,
+        time = "1:00:00"
     params:
         batch_id = lambda wildcards: int(wildcards.batch),
         batch_size = BATCH_SIZE,
         datasubdir = datasubdir,
         **{k: v for k, v in config.items()}
-    group: "process"
-    resources:
-        mem_mb = 4000,
-        time = "1:00:00"
     script: "scripts/process_ts_batch.py"
 
 rule train_npe:
     message:
         "training neural posterior estimators with {wildcards.k} data points rep {wildcards.e}..."
     input:
-        # Calculate how many batches we need for k training samples
-        sim_markers = lambda w: [os.path.join(datadir, f"batch_{b}", "sims.done") 
-                               for b in range((int(w.k) + BATCH_SIZE - 1) // BATCH_SIZE)],
-        feature_markers = lambda w: [os.path.join(datadir, datasubdir, f"batch_{b}", "features.done") 
-                                   for b in range((int(w.k) + BATCH_SIZE - 1) // BATCH_SIZE)]
+        train_zarr=os.path.join(datadir, datasubdir, "train.zarr"),
+        test_zarr=os.path.join(datadir, datasubdir, "test.zarr")
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_estimator_rep_{e}.pkl"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "inference_rep_{e}.pkl")
     log:
         "logs/train_npe_n_train_{k}_rep_{e}.log"
+    threads: 4
     resources:
-        runtime = "3h",
-        mem_mb = 25000,
-        threads=10,
-        slurm_partition="kerngpu,gpu",
-        gpus=1,
-        slurm_extra="--gres=gpu:1 --constraint=gpu-80gb"
+        runtime = "4h",
+        mem_mb = 50000,
+        slurm_partition = "kerngpu,gpu",
+        gpus = 1,
+        slurm_extra = "--gres=gpu:1 --constraint=a100"
     params:
-        n_train="{k}",
-        ensemble="{e}",
-        datasubdir=datasubdir,
-        posteriorsubdir=posteriorsubdir,
+        n_train = "{k}",
+        ensemble = "{e}",
+        datasubdir = datasubdir,
+        posteriorsubdir = posteriorsubdir,
+        batch_size = config["train_npe"]["batch_size"],
+        learning_rate = config["train_npe"]["learning_rate"],
+        validation_fraction = config["train_npe"]["validation_fraction"],
+        stop_after_epoch = config["train_npe"]["stop_after_epoch"],
+        clip_max_norm = config["train_npe"]["clip_max_norm"],
         **{k: v for k, v in config.items()}
-    script: "scripts/train_npe.py"
+    script: "scripts/train_npe_custom.py"
 
 rule posterior_ensemble:
     message:
@@ -215,16 +207,18 @@ rule plot_posterior:
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_samples.npy"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "default_obs_corner.png")
-    log: "logs/plot_posterior_n_train_{k}.log"
+    log: 
+        "logs/plot_posterior_n_train_{k}.log"
     resources:
         mem_mb="5000",
         gpus=1,
-        slurm_partition="gpu",
+        slurm_partition="gpu,kerngpu",
         slurm_extra="--gres=gpu:1 --constraint=a100"
     params:
         n_train=lambda wildcards: wildcards.k,
         datasubdir=datasubdir,
         posteriorsubdir=posteriorsubdir,
+        device="cuda:0",
         **{k: v for k, v in config.items()}
     script: "scripts/plotting.py"
 
@@ -254,14 +248,16 @@ rule plot_coverage_prob:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_coverage.png"),
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "observed_coverage.npy")
     resources:
-        slurm_partition="kerngpu,gpu",
-        gpus=1,
-        slurm_extra="--gres=gpu:1 --constraint=a100"
+        mem_mb = "20000",
+        gpus = 1,
+        slurm_partition = "gpu,kerngpu",
+        slurm_extra = "--gres=gpu:1 --constraint=a100"
     params:
-        n_train=lambda wildcards: wildcards.k,
-        n_boot=n_rep,
-        datasubdir=datasubdir,
-        posteriorsubdir=posteriorsubdir,
+        n_train = lambda wildcards: wildcards.k,
+        n_boot = n_rep,
+        datasubdir = datasubdir,
+        posteriorsubdir = posteriorsubdir,
+        device = "cuda:0",
         **{k: v for k, v in config.items()}
     script: "scripts/coverage_prob.py"
 
@@ -280,8 +276,8 @@ rule run_sbc:
     resources:
         mem_mb="10000",
         gpus=1,
-        slurm_partition="gpu,kerngpu",
-        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
+        slurm_partition="kerngpu",
+        slurm_extra = "--gres=gpu:1 --constraint=a100"
     params:
         n_train=lambda wildcards: wildcards.k,
         n_boot=n_rep,
@@ -312,7 +308,7 @@ rule process_test_ts_batch:
     message:
         "processing batch {wildcards.batch} of test tree sequences..."
     input:
-        os.path.join(datadir, "test_batch_{batch}", "test_sims.done")
+        rules.simulate_test_ts_batch.output
     output:
         done = os.path.join(datadir, datasubdir, "test_batch_{batch}", "test_features.done")
     log:
@@ -327,6 +323,64 @@ rule process_test_ts_batch:
         mem_mb = 4000,
         time = "1:00:00"
     script: "scripts/process_ts_batch.py"
+
+rule process_default_ts:
+    message:
+        "processing default tree sequence..."
+    input:
+        os.path.join(datadir, "ts_star.trees")
+    output:
+        os.path.join(datadir, datasubdir, "x_obs.npy")
+    log:
+        "logs/process_default_ts.log"
+    params:
+        **{k: v for k, v in config.items()}
+    script:
+        "scripts/process_default_ts.py"
+
+rule create_train_zarr:
+    message: "Creating zarr dataset from training simulations..."
+    input:
+        sims=expand(os.path.join(datadir, "batch_{batch}", "sims.done"),
+               batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE)),
+        features=expand(os.path.join(datadir, datasubdir, "batch_{batch}/features.done"), 
+               batch=range((n_sims + BATCH_SIZE - 1) // BATCH_SIZE))
+    output:
+        zarr=directory(os.path.join(datadir, datasubdir, "train.zarr"))
+    params:
+        n_sims=n_sims,
+        datadir=datadir,
+        datasubdir=datasubdir,
+        batch_size=config["train_npe"]["batch_size"],
+        prefix=""
+    threads: 12
+    resources:
+        mem_mb=16000,
+        runtime="1h"
+    script:
+        "scripts/create_zarr.py"
+
+rule create_test_zarr:
+    message: "Creating zarr dataset from test simulations..."
+    input:
+        sims=expand(os.path.join(datadir, "test_batch_{batch}", "test_sims.done"),
+                    batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE)),
+        features=expand(os.path.join(datadir, datasubdir, "test_batch_{batch}/test_features.done"),
+                    batch=range((n_rep + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE))
+    output:
+        zarr=directory(os.path.join(datadir, datasubdir, "test.zarr"))
+    params:
+        n_sims=n_rep,
+        datadir=datadir,
+        datasubdir=datasubdir,
+        batch_size=config["train_npe"]["batch_size"],
+        prefix="test_"
+    threads: 8
+    resources:
+        mem_mb=16000,
+        runtime="1h"
+    script:
+        "scripts/create_zarr.py"
 
 
 
