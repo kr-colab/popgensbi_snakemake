@@ -10,3 +10,7 @@ n_ensemble: 10 # number of ensemble members
 n_rep_coverage: 100
 train_npe:
   batch_size: 256 # batch size for training
+  learning_rate: 0.0005
+  validation_fraction: 0.2
+  stop_after_epoch: 20
+  clip_max_norm: 5
