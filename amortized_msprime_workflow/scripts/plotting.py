@@ -35,6 +35,7 @@ try:
             limits=list(list(v) for v in bounds.values()),
             ticks=list(list(v) for v in bounds.values()), 
             figsize=(10, 10), 
+            upper="kde",
             points=np.array(list(theta_star.values())))
     plt.savefig(os.path.join(posteriordir, posteriorsubdir, f"n_train_{n_train}", "default_obs_corner.png"))
 except KeyError:

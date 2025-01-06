@@ -342,8 +342,13 @@ posteriordir = snakemake.params.posteriordir
 posteriorsubdir = snakemake.params.posteriorsubdir
 ensemble = snakemake.params.ensemble
 n_train = int(snakemake.params.n_train)
-# Get batch_size from config, use default if not specified
-batch_size = int(getattr(snakemake.params, 'batch_size', DEFAULT_BATCH_SIZE))
+
+# Get training parameters from config
+batch_size = snakemake.params.batch_size
+learning_rate = snakemake.params.learning_rate
+validation_fraction = snakemake.params.validation_fraction
+stop_after_epochs = snakemake.params.stop_after_epoch
+clip_max_norm = snakemake.params.clip_max_norm
 
 # Create directories if they don't exist
 if not os.path.isdir(posteriordir):
@@ -415,10 +420,10 @@ posterior_estimator = train_on_disk(
     train_zarr_path,
     n_train,
     training_batch_size=batch_size,
-    learning_rate=5e-4,
-    validation_fraction=0.2,
-    stop_after_epochs=20,
-    clip_max_norm=5.0,
+    learning_rate=learning_rate,
+    validation_fraction=validation_fraction,
+    stop_after_epochs=stop_after_epochs,
+    clip_max_norm=clip_max_norm,
     show_train_summary=True
 )
 

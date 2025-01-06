@@ -170,7 +170,11 @@ rule train_npe:
         ensemble = "{e}",
         datasubdir = datasubdir,
         posteriorsubdir = posteriorsubdir,
-        batch_size = 256,
+        batch_size = config["train_npe"]["batch_size"],
+        learning_rate = config["train_npe"]["learning_rate"],
+        validation_fraction = config["train_npe"]["validation_fraction"],
+        stop_after_epoch = config["train_npe"]["stop_after_epoch"],
+        clip_max_norm = config["train_npe"]["clip_max_norm"],
         **{k: v for k, v in config.items()}
     script: "scripts/train_npe_custom.py"
 
@@ -272,8 +276,8 @@ rule run_sbc:
     resources:
         mem_mb="10000",
         gpus=1,
-        slurm_partition="gpu,kerngpu",
-        slurm_extra="--gres=gpu:nvidia_a100_80gb_pcie:1"
+        slurm_partition="kerngpu",
+        slurm_extra = "--gres=gpu:1 --constraint=a100"
     params:
         n_train=lambda wildcards: wildcards.k,
         n_boot=n_rep,
@@ -347,7 +351,7 @@ rule create_train_zarr:
         n_sims=n_sims,
         datadir=datadir,
         datasubdir=datasubdir,
-        batch_size=512,
+        batch_size=config["train_npe"]["batch_size"],
         prefix=""
     threads: 12
     resources:
@@ -369,7 +373,7 @@ rule create_test_zarr:
         n_sims=n_rep,
         datadir=datadir,
         datasubdir=datasubdir,
-        batch_size=512,
+        batch_size=config["train_npe"]["batch_size"],
         prefix="test_"
     threads: 8
     resources:
