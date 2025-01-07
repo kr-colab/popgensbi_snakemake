@@ -85,7 +85,17 @@ rule process_all:
 
 rule train_all:
     input:
-        expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl"), k=n_trains)
+        lambda wildcards: (
+            # If using frozen embedding network training strategy
+            expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "embedding_network_rep_{e}.pkl"), 
+                   k=n_trains, e=range(n_ensemble)) +
+            expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_frozen_rep_{e}.pkl"), 
+                   k=n_trains, e=range(n_ensemble))
+            if config.get("training_strategy", "end_to_end") == "frozen_embedding"
+            # Otherwise use end-to-end training
+            else expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"), 
+                       k=n_trains, e=range(n_ensemble))
+        )
 
 rule analyze_all:
     input:
@@ -182,8 +192,15 @@ rule posterior_ensemble:
     message:
         "creating an ensemble posterior for training data size {wildcards.k}"
     input:
-        lambda wildcards: expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"), 
-                               e=range(n_ensemble), k=[wildcards.k])
+        lambda wildcards: (
+            # If using frozen embedding network training strategy
+            expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_frozen_rep_{e}.pkl"), 
+                   e=range(n_ensemble), k=[wildcards.k])
+            if config.get("training_strategy", "end_to_end") == "frozen_embedding"
+            # Otherwise use end-to-end training
+            else expand(os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_rep_{e}.pkl"), 
+                       e=range(n_ensemble), k=[wildcards.k])
+        )
     output:
         os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "ensemble_posterior.pkl")
     log:
@@ -381,6 +398,73 @@ rule create_test_zarr:
         runtime="1h"
     script:
         "scripts/create_zarr.py"
+
+rule train_embedding_network:
+    message:
+        "training embedding network with {wildcards.k} data points rep {wildcards.e}..."
+    input:
+        train_zarr=os.path.join(datadir, datasubdir, "train.zarr"),
+        test_zarr=os.path.join(datadir, datasubdir, "test.zarr")
+    output:
+        os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "embedding_network_rep_{e}.pkl"),
+        os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "embedding_training_rep_{e}.pkl")
+    log:
+        "logs/train_embedding_network_n_train_{k}_rep_{e}.log"
+    threads: 4
+    resources:
+        runtime = "4h",
+        mem_mb = 50000,
+        slurm_partition = "kerngpu,gpu",
+        gpus = 1,
+        slurm_extra = "--gres=gpu:1 --constraint=a100"
+    params:
+        n_train = "{k}",
+        ensemble = "{e}",
+        datasubdir = datasubdir,
+        posteriorsubdir = posteriorsubdir,
+        batch_size = config["train_npe"]["batch_size"],
+        learning_rate = config["train_npe"]["learning_rate"],
+        validation_fraction = config["train_npe"]["validation_fraction"],
+        stop_after_epoch = config["train_npe"]["stop_after_epoch"],
+        clip_max_norm = config["train_npe"]["clip_max_norm"],
+        **{k: v for k, v in config.items()}
+    script: "scripts/train_embedding_network.py"
+
+rule train_npe_frozen_embedding_net:
+    message:
+        "training neural posterior estimator with frozen embedding network from {wildcards.k} data points rep {wildcards.e}..."
+    input:
+        train_zarr=os.path.join(datadir, datasubdir, "train.zarr"),
+        test_zarr=os.path.join(datadir, datasubdir, "test.zarr"),
+        embedding_network=os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "embedding_network_rep_{e}.pkl"),
+        obs=os.path.join(datadir, datasubdir, "x_obs.npy"),
+        default_sim=[os.path.join(datadir, "ts_star.trees"),
+                    os.path.join(datadir, "theta_star.npy")]
+    output:
+        os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_frozen_rep_{e}.pkl"),
+        os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "posterior_estimator_frozen_rep_{e}.pkl"),
+        os.path.join(posteriordir, posteriorsubdir, "n_train_{k}", "inference_frozen_rep_{e}.pkl")
+    log:
+        "logs/train_npe_frozen_embedding_net_n_train_{k}_rep_{e}.log"
+    threads: 4
+    resources:
+        runtime = "4h",
+        mem_mb = 50000,
+        slurm_partition = "kerngpu,gpu",
+        gpus = 1,
+        slurm_extra = "--gres=gpu:1 --constraint=a100"
+    params:
+        n_train = "{k}",
+        ensemble = "{e}",
+        datasubdir = datasubdir,
+        posteriorsubdir = posteriorsubdir,
+        batch_size = config["train_npe"]["batch_size"],
+        learning_rate = config["train_npe"]["learning_rate"],
+        validation_fraction = config["train_npe"]["validation_fraction"],
+        stop_after_epoch = config["train_npe"]["stop_after_epoch"],
+        clip_max_norm = config["train_npe"]["clip_max_norm"],
+        **{k: v for k, v in config.items()}
+    script: "scripts/train_npe_frozen_embedding.py"
 
 
 

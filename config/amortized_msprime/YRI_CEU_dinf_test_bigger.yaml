@@ -8,6 +8,7 @@ n_trains : [10000]
 n_snps : 1000
 n_ensemble: 10 # number of ensemble members
 n_rep_coverage: 100
+training_strategy: "frozen_embedding"
 train_npe:
   batch_size: 256 # batch size for training
   learning_rate: 0.0005
