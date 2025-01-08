@@ -124,11 +124,6 @@ def train_on_disk(
     stop_after_epochs: int = 20,
     max_num_epochs: int = 2**31 - 1,
     clip_max_norm: Optional[float] = 5.0,
-    calibration_kernel: Optional[Callable] = None,
-    resume_training: bool = False,
-    force_first_round_loss: bool = False,
-    discard_prior_samples: bool = False,
-    retrain_from_scratch: bool = False,
     show_train_summary: bool = True,
     preload_chunks: bool = True,
     dataloader_kwargs: Optional[Dict] = None,
@@ -150,7 +145,6 @@ def train_on_disk(
     
     logger.info("Creating datasets...")
     dataset_start = time.time()
-    # Create datasets using zarr with preloading to CPU
     train_dataset = ZarrDataset(train_zarr_path, indices=training_indices, preload_chunks=preload_chunks)
     val_dataset = ZarrDataset(train_zarr_path, indices=validation_indices, preload_chunks=preload_chunks)
     logger.info(f"Dataset creation took {time.time() - dataset_start:.2f}s")
@@ -180,178 +174,39 @@ def train_on_disk(
         **dataloader_kwargs
     )
 
-    # Initialize neural network if needed
-    logger.info("Setting up neural network...")
-    assert inference.embedding_net == torch.Identity(), "TODO"
-    net_start = time.time()
-    if inference._neural_net is None or retrain_from_scratch:
-        # Load first batch to get shapes (already on GPU)
-        first_theta, first_x = next(iter(train_loader))
-        first_ex = embedding_net(first_x)
-        inference._neural_net = inference._build_neural_net(
-            first_theta,  # Already on GPU
-            first_ex,  # Already on GPU
-        )
-        inference._x_shape = x_shape_from_simulation(first_ex)
-
-    # Move network to device
     embedding_net.to(device)
-    inference._neural_net.to(device)
-    logger.info(f"Neural network setup took {time.time() - net_start:.2f}s")
-    
-    # Get proposal for current round
-    proposal = inference._proposal_roundwise[inference._round]
-    
-    # Initialize or resume training state
-    if not resume_training:
-        params = list(inference._neural_net.parameters())
-        if not freeze_embedding:
-            params += list(embedding_net.parameters())
-        optimizer = torch.optim.Adam(params, lr=learning_rate)
-        epoch, val_log_prob = 0, float("-Inf")
-    else:
-        optimizer = inference.optimizer
-        epoch = inference.epoch
-        val_log_prob = inference._val_log_prob
+    first_theta, first_x = next(iter(train_loader))
+    first_ex = embedding_net(first_x)
 
-    # Initialize training summaries
-    if not hasattr(inference, "_summary"):
-        inference._summary = {
-            "training_log_probs": [],
-            "validation_log_probs": [],
-            "epochs_trained": [],
-            "best_validation_log_prob": [],
-            "epoch_durations_sec": []
-        }
+    class Model(L.Module):
+        def __init__(self):
+            self.embedding_net = embedding_net
+            self.density_estimator = inference._build_neural_net(first_theta, first_ex)
 
-    best_val_log_prob = float("-Inf")
-    epochs_since_last_improvement = 0
+        def loss(self, thetas, xs):
+            """
+            Use uncorrected (first-round) loss, as there's only a single training round:
+            https://github.com/sbi-dev/sbi/blob/9152e933871eee48a40be6f67b9f802a37c41b69/sbi/inference/trainers/npe/npe_base.py#L606
+            """
+            embedding = self.embedding_net.embedding(xs)
+            losses = self.density_estimator._loss(thetas, embedding)
+            return -torch.mean(losses).sum().item() #TODO why sum
 
-    # Add timing tracking
-    start_time = time.time()
-    total_batches = 0
-    
-    while epoch <= max_num_epochs:
-        epoch_start = time.time()
-        batch_count = 0
-        
-        # Training phase
-        inference._neural_net.train()
-        train_log_probs_sum = 0
-        
-        for batch_thetas, batch_xs in train_loader:
-            batch_start = time.time()
-            
-            # Asynchronous transfer to GPU
-            batch_thetas = batch_thetas.to(device, non_blocking=True)
-            batch_xs = batch_xs.to(device, non_blocking=True)
+        def training_step(self, data):
+            loss = self.loss(*data)
+            self.log(...)
+            return loss
 
-            # Embed
-            batch_exs = embedding_net(batch_xs)
-            
-            # Create masks on GPU directly
-            batch_masks = torch.ones(batch_exs.shape[0], device=device)
-            
-            optimizer.zero_grad(set_to_none=True)
-            
-            train_losses = inference._loss(
-                batch_thetas,
-                batch_exs,
-                batch_masks,
-                proposal=proposal,
-                calibration_kernel=lambda x: torch.ones(batch_thetas.shape[0], device=device),
-                force_first_round_loss=force_first_round_loss
-            )
-            train_loss = torch.mean(train_losses)
-            train_log_probs_sum -= train_losses.sum().item()
-            
-            train_loss.backward()
-            if clip_max_norm is not None:
-                clip_grad_norm_(inference._neural_net.parameters(), max_norm=clip_max_norm)
-            optimizer.step()
+        def validation_step(self, data):
+            loss = self.loss(*data)
+            self.log(...)
+            return loss
 
-            batch_count += 1
-            if batch_count % 10 == 0:
-                current_speed = batch_count / (time.time() - epoch_start)
-                logger.info(f"Epoch {epoch}, Batch {batch_count}: "
-                          f"Speed = {current_speed:.2f} batches/sec, "
-                          f"Loss = {train_loss.item():.4f}")
+        def configure_optimizers(self):
+            return torch.optim.Adam(self.parameters(), lr=learning_rate)
 
-            # Clean up
-            del train_losses, train_loss, batch_thetas, batch_xs, batch_masks
 
-        # End of epoch timing
-        epoch_time = time.time() - epoch_start
-        logger.info(f"Epoch {epoch} completed in {epoch_time:.2f}s, "
-                   f"Average speed: {batch_count/epoch_time:.2f} batches/sec")
-
-        # Validation phase
-        inference._neural_net.eval()
-        val_log_probs_sum = 0
-        
-        with torch.no_grad():
-            for batch_thetas, batch_xs in val_loader:
-                # Asynchronous transfer to GPU
-                batch_thetas = batch_thetas.to(device, non_blocking=True)
-                batch_xs = batch_xs.to(device, non_blocking=True)
-                batch_masks = torch.ones(batch_xs.shape[0], device=device)
-                
-                batch_exs = embedding_net(batch_xs)
-                val_losses = inference._loss(
-                    batch_thetas,
-                    batch_exs,
-                    batch_masks,
-                    proposal=proposal,
-                    calibration_kernel=lambda x: torch.ones(batch_thetas.shape[0], device=device),
-                    force_first_round_loss=force_first_round_loss
-                )
-                val_log_probs_sum -= val_losses.sum().item()
-
-                # Clean up
-                del val_losses, batch_thetas, batch_xs, batch_masks
-
-        # Calculate metrics
-        train_log_prob = train_log_probs_sum / len(train_loader.dataset)
-        val_log_prob = val_log_probs_sum / len(val_loader.dataset)
-
-        # Update summaries
-        inference._summary["training_log_probs"].append(train_log_prob)
-        inference._summary["validation_log_probs"].append(val_log_prob)
-        inference._summary["epoch_durations_sec"].append(time.time() - epoch_start)
-
-        # Early stopping logic
-        if val_log_prob > best_val_log_prob:
-            best_val_log_prob = val_log_prob
-            epochs_since_last_improvement = 0
-            best_model_state_dict = inference._neural_net.state_dict().copy()
-        else:
-            epochs_since_last_improvement += 1
-
-        if epochs_since_last_improvement >= stop_after_epochs:
-            break
-
-        # Update progress
-        if inference._show_progress_bars:
-            inference._maybe_show_progress(inference._show_progress_bars, epoch)
-
-        epoch += 1
-
-    # Restore best model
-    if best_model_state_dict is not None:
-        inference._neural_net.load_state_dict(best_model_state_dict)
-
-    # Update final summaries
-    inference._summary["epochs_trained"].append(epoch)
-    inference._summary["best_validation_log_prob"].append(best_val_log_prob)
-    inference._summarize(round_=inference._round)
-
-    if show_train_summary:
-        print(inference._describe_round(inference._round, inference._summary))
-
-    # Clear gradients
-    inference._neural_net.zero_grad(set_to_none=True)
-
-    return deepcopy(inference._neural_net)
+    # return deepcopy of neural net
 
 # Get parameters from snakemake
 datadir = snakemake.params.datadir
@@ -411,7 +266,6 @@ elif snakemake.params.embedding_net =="Identity":
 normalizing_flow_density_estimator = posterior_nn(
     model="maf_rqs",
     z_score_x="none",
-    embedding_net=embedding_net
 )
 
 # Set up tensorboard logging
@@ -426,9 +280,9 @@ inference = SNPE(
     summary_writer=SummaryWriter(log_dir=log_dir)
 )
 
-# Initialize inference with first round
-inference._data_round_index = [0]  # Initialize with round 0
-inference._proposal_roundwise = [prior]  # Use prior as the first proposal
+## Initialize inference with first round
+#inference._data_round_index = [0]  # Initialize with round 0
+#inference._proposal_roundwise = [prior]  # Use prior as the first proposal
 
 # Use zarr paths directly
 train_zarr_path = os.path.join(datadir, datasubdir, "train.zarr")
