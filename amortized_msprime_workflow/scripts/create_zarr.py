@@ -12,13 +12,13 @@ def load_and_write_chunk(args):
     for i in range(start_idx, end_idx):
         x = np.load(os.path.join(datadir, datasubdir, f"{prefix}x_{i}.npy"))
         theta = np.load(os.path.join(datadir, f"{prefix}theta_{i}.npy"))
-        x_array[i] = x
+        x_array[i] = x.flatten()
         theta_array[i] = theta
 
 def create_zarr_dataset(output_path, datadir, datasubdir, indices, batch_size=512, prefix="", n_workers=8):
     """Create a zarr dataset from numpy files with chunks aligned to batch size"""
     
-    # Load first file to get shapes
+    # Load first file to get shapes, assuming first dimension of x may be ragged
     x_shape = np.load(os.path.join(datadir, datasubdir, f"{prefix}x_0.npy")).shape
     theta_shape = np.load(os.path.join(datadir, f"{prefix}theta_0.npy")).shape
     
@@ -28,13 +28,13 @@ def create_zarr_dataset(output_path, datadir, datasubdir, indices, batch_size=51
     root = zarr.group(store=store)
     
     # Chunk size matches batch_size for first dimension, full size for feature dimensions
-    x_chunks = (batch_size, *x_shape)
+    x_chunks = batch_size
     theta_chunks = (batch_size, *theta_shape)
     
-    x_array = root.create_dataset('x', 
-                                shape=(len(indices), *x_shape),
+    x_array = root.create_dataset('x',  # store flattened, possibly ragged arrays
+                                shape=len(indices),
                                 chunks=x_chunks,
-                                dtype=np.float32,
+                                dtype='array:f4',
                                 compressor=compressor)
     
     theta_array = root.create_dataset('theta',
@@ -42,6 +42,11 @@ def create_zarr_dataset(output_path, datadir, datasubdir, indices, batch_size=51
                                     chunks=theta_chunks,
                                     dtype=np.float32,
                                     compressor=compressor)
+
+    root.attrs.update({
+        "x_shape": x_shape[1:],
+        "theta_shape": theta_shape,
+    })
     
     # Split work into chunks for parallel processing
     n_total = len(indices)

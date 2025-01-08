@@ -65,23 +65,27 @@ except Exception as e:
 
 class ZarrDataset(Dataset):
     """Dataset that loads from zarr files efficiently"""
-    def __init__(self, zarr_path, indices=None, preload_chunks=True):
+    def __init__(self, zarr_path, indices=None, preload_chunks=True, ragged_x=False):
         self.root = zarr.open(zarr_path, mode='r')
         self.x_data = self.root['x']
         self.theta_data = self.root['theta']
+        self.collate_fn = lambda x: pack_sequence(x, enforce_sorted=False) if ragged_x else torch.stack
         
         # Use all indices if none provided
         self.indices = indices if indices is not None else range(len(self.x_data))
         
         # Get shapes
-        self.x_shape = self.x_data.shape[1:]
-        self.theta_shape = self.theta_data.shape[1:]
+        self.x_shape = self.root.attrs['x_shape']
+        self.theta_shape = self.root.attrs['theta_shape']
 
         # Preload data into CPU memory if requested
         if preload_chunks:
             logger.info("Preloading data into CPU memory...")
             # Keep data on CPU
-            self.x_cache = torch.from_numpy(self.x_data[self.indices]).float()
+            self.x_cache = [
+                torch.from_numpy(x.reshape(-1, *self.x_shape)).float()
+                for x in self.x_data[self.indices]
+            ]
             self.theta_cache = torch.from_numpy(self.theta_data[self.indices]).float()
             logger.info("Data preloaded")
             self.use_cache = True
@@ -95,17 +99,25 @@ class ZarrDataset(Dataset):
         else:
             # Load from zarr and return CPU tensors
             actual_idx = self.indices[idx]
-            x = torch.from_numpy(self.x_data[actual_idx]).float()
+            x = torch.from_numpy(self.x_data[actual_idx].reshape(-1, *self.x_shape)).float()
             theta = torch.from_numpy(self.theta_data[actual_idx]).float()
             return theta, x
 
     def __len__(self):
         return len(self.indices)
 
+    def make_collate_fn(self):
+        return lambda data: tuple(
+            torch.stack((d[0] for d in data)),
+            self.collate_fn((d[1] for d in data)),
+        )
+            
+
 def train_on_disk(
     inference,
     train_zarr_path: str,
     n_train: int,
+    embedding_net: torch.Module = torch.Identity(),
     training_batch_size: int = 512,
     learning_rate: float = 5e-4,
     validation_fraction: float = 0.1,
@@ -170,17 +182,20 @@ def train_on_disk(
 
     # Initialize neural network if needed
     logger.info("Setting up neural network...")
+    assert inference.embedding_net == torch.Identity(), "TODO"
     net_start = time.time()
     if inference._neural_net is None or retrain_from_scratch:
         # Load first batch to get shapes (already on GPU)
         first_theta, first_x = next(iter(train_loader))
+        first_ex = embedding_net(first_x)
         inference._neural_net = inference._build_neural_net(
             first_theta,  # Already on GPU
-            first_x,  # Already on GPU
+            first_ex,  # Already on GPU
         )
-        inference._x_shape = x_shape_from_simulation(first_x)
+        inference._x_shape = x_shape_from_simulation(first_ex)
 
     # Move network to device
+    embedding_net.to(device)
     inference._neural_net.to(device)
     logger.info(f"Neural network setup took {time.time() - net_start:.2f}s")
     
@@ -189,10 +204,10 @@ def train_on_disk(
     
     # Initialize or resume training state
     if not resume_training:
-        optimizer = torch.optim.Adam(
-            list(inference._neural_net.parameters()),
-            lr=learning_rate
-        )
+        params = list(inference._neural_net.parameters())
+        if not freeze_embedding:
+            params += list(embedding_net.parameters())
+        optimizer = torch.optim.Adam(params, lr=learning_rate)
         epoch, val_log_prob = 0, float("-Inf")
     else:
         optimizer = inference.optimizer
@@ -230,15 +245,18 @@ def train_on_disk(
             # Asynchronous transfer to GPU
             batch_thetas = batch_thetas.to(device, non_blocking=True)
             batch_xs = batch_xs.to(device, non_blocking=True)
+
+            # Embed
+            batch_exs = embedding_net(batch_xs)
             
             # Create masks on GPU directly
-            batch_masks = torch.ones(batch_xs.shape[0], device=device)
+            batch_masks = torch.ones(batch_exs.shape[0], device=device)
             
             optimizer.zero_grad(set_to_none=True)
             
             train_losses = inference._loss(
                 batch_thetas,
-                batch_xs,
+                batch_exs,
                 batch_masks,
                 proposal=proposal,
                 calibration_kernel=lambda x: torch.ones(batch_thetas.shape[0], device=device),
@@ -278,9 +296,10 @@ def train_on_disk(
                 batch_xs = batch_xs.to(device, non_blocking=True)
                 batch_masks = torch.ones(batch_xs.shape[0], device=device)
                 
+                batch_exs = embedding_net(batch_xs)
                 val_losses = inference._loss(
                     batch_thetas,
-                    batch_xs,
+                    batch_exs,
                     batch_masks,
                     proposal=proposal,
                     calibration_kernel=lambda x: torch.ones(batch_thetas.shape[0], device=device),
