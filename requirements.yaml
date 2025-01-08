@@ -23,3 +23,4 @@ dependencies:
     - snakemake-executor-plugin-slurm
     - natsort
     - moments-popgen
+    - lightning
