@@ -63,6 +63,7 @@ except Exception as e:
     logger.error(f"Error setting up device: {e}")
     raise
 
+
 class ZarrDataset(Dataset):
     """Dataset that loads from zarr files efficiently"""
     def __init__(self, zarr_path, indices=None, preload_chunks=True, ragged_x=False):
@@ -120,7 +121,7 @@ def train_on_disk(
     embedding_net: torch.Module = torch.Identity(),
     training_batch_size: int = 512,
     learning_rate: float = 5e-4,
-    validation_fraction: float = 0.1,
+    validation_fraction: float = 0.2,
     stop_after_epochs: int = 20,
     max_num_epochs: int = 2**31 - 1,
     clip_max_norm: Optional[float] = 5.0,
@@ -162,9 +163,10 @@ def train_on_disk(
         **dataloader_kwargs
     )
     
+    validation_batch_size = training_batch_size * 2
     val_loader = DataLoader(
         val_dataset,
-        batch_size=training_batch_size * 2,
+        batch_size=validation_batch_size,
         shuffle=False,
         num_workers=max(1, N_WORKERS // 2),
         pin_memory=True,  # Required for efficient non-blocking transfers
@@ -178,7 +180,7 @@ def train_on_disk(
     first_theta, first_x = next(iter(train_loader))
     first_ex = embedding_net(first_x)
 
-    class Model(L.Module):
+    class Model(LightningModule):
         def __init__(self):
             self.embedding_net = embedding_net
             self.density_estimator = inference._build_neural_net(first_theta, first_ex)
@@ -194,16 +196,48 @@ def train_on_disk(
 
         def training_step(self, data):
             loss = self.loss(*data)
-            self.log(...)
+            self.log("train_loss", loss, batch_size=training_batch_size, sync_dist=True)
             return loss
 
         def validation_step(self, data):
             loss = self.loss(*data)
-            self.log(...)
+            self.log("val_loss", loss, batch_size=validation_batch_size, sync_dist=True)
             return loss
 
         def configure_optimizers(self):
             return torch.optim.Adam(self.parameters(), lr=learning_rate)
+
+
+    model = Model()
+    logger = TensorBoardLogger(embedding_path, version=model_name)
+    save_best_model = ModelCheckpoint(
+        dirpath=...,
+        filename=os.path.basename(checkpoint_path).removesuffix(".ckpt"), 
+        save_top_k=1, 
+        monitor='val_loss',
+        enable_version_counter=False,
+    )
+    stop_early = EarlyStopping(
+        monitor="val_loss", 
+        mode="min", 
+        patience=stop_after_epochs,
+    )
+    trainer = Trainer(
+        max_epochs=max_num_epochs,
+        accelerator=..., #'cuda',
+        devices=..., #[args.gpu],
+        default_root_dir=..., #embedding_path,
+        gradient_clip_val=clip_max_norm,
+        logger=logger,
+        callbacks=[save_best_model, stop_early],
+    )
+    logger.info("Training model...")
+    trainer.fit(
+        model=model, 
+        train_dataloaders=train_loader, 
+        val_dataloaders=val_loader,
+        ckpt_path=checkpoint_path,
+    )
 
 
     # return deepcopy of neural net
@@ -261,6 +295,8 @@ elif snakemake.params.embedding_net == "CNN":
     embedding_net = CNNEmbedding(input_shape=xs_shape[1:]).to(device)
 elif snakemake.params.embedding_net =="Identity":
     embedding_net = torch.nn.Identity().to(device)
+else:
+    raise ValueError("Embedding network not implemented")
 
 # Set up neural density estimator
 normalizing_flow_density_estimator = posterior_nn(

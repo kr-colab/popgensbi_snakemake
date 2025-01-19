@@ -13,15 +13,14 @@ dependencies:
   - snakemake
   - pip
   - pip:
-    - sbi==v0.22.0
+    - sbi>=0.23.0
     - zarr<3.0.0
+    - matplotlib
+    - seaborn
     - dinf
     - snakemake-executor-plugin-slurm
-    - natsort
     - moments-popgen
     - lightning
     - msprime
     - stdpopsim
     - dadi
-    - defopt
-    - zuko

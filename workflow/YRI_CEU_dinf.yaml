@@ -1,0 +1,42 @@
+# --- top level arguments are ALWAYS REQUIRED --- #
+
+project_dir: "/sietch_colab/natep/popgensbi/popgensbi_snakemake/YRI_CEU_dinf"
+
+random_seed: 1
+chunk_size: 100 # number of instances to simulate per worker
+n_train: 10000
+n_val: 1000
+n_test: 1000
+
+train_embedding_net_separately: False # train embedding network separately from normalizing flow
+optimizer: "Adam"
+batch_size: 32
+learning_rate: 0.0005
+max_num_epochs: 200
+stop_after_epochs: 20
+clip_max_norm: 5
+packed_sequence: False
+
+simulator:
+  class_name: "YRI_CEU"
+  # OPTIONAL CLASS KWARGS:
+  sequence_length: 1000000
+  mutation_rate: 1.5e-8
+  recombination_rate: 1.5e-8
+  samples:
+    YRI: 10
+    CEU: 10
+
+processor:
+  class_name: "dinf_multiple_pops"
+  # OPTIONAL CLASS KWARGS:
+  n_snps: 2000
+  maf_thresh: 0.05
+
+embedding_network:
+  class_name: "ExchangeableCNN_IN"
+  # OPTIONAL CLASS KWARGS:
+  output_dim: 64
+  input_rows: [10, 10]
+  input_cols: [2000, 2000]
+
