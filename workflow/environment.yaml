@@ -1,0 +1,26 @@
+name: popgensbi_env
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8 # comment this out if cuda isn't available
+  - snakemake
+  - pip
+  - pip:
+    - sbi>=0.23.0
+    - zarr<3.0.0
+    - matplotlib
+    - seaborn
+    - dinf
+    - snakemake-executor-plugin-slurm
+    - moments-popgen
+    - lightning
+    - msprime
+    - stdpopsim
+    - dadi
