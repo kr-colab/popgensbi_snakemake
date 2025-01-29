@@ -15,6 +15,7 @@ n_sims = np.sum(split_sizes)
 rng = np.random.default_rng(random_seed)
 
 # Create zarr arrays with compression
+# TODO: make compression optional? Decompression adds a lot of overhead
 compressor = Blosc(cname='zstd', clevel=3, shuffle=Blosc.SHUFFLE)
 store = zarr.DirectoryStore(zarr_path)
 root = zarr.group(store=store)

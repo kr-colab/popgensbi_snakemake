@@ -39,6 +39,7 @@ for split in ["sbi_train", "sbi_val"]:
         snakemake.input.zarr, 
         split=split,
         packed_sequence=snakemake.params.packed_sequence,
+        use_cache=snakemake.params.use_cache,
     )
     zarr_loader = DataLoader(
         zarr_dataset,
@@ -89,6 +90,7 @@ class Model(LightningModule):
     def configure_optimizers(self):
         optimizer = getattr(torch.optim, snakemake.params.optimizer)
         return optimizer(self.parameters(), lr=snakemake.params.learning_rate)
+
 
 # Train model
 model = Model()

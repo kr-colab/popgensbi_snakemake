@@ -6,6 +6,10 @@ import numpy as np
 # errors b/c of optional arguments for embedding net
 #configfile: "workflow/YRI_CEU_dinf.yaml"
 
+CPU_RESOURCES = config.get("cpu_resources", {})
+GPU_RESOURCES = config.get("gpu_resources", {})
+
+# Simulation design
 N_TRAIN = int(config["n_train"])
 N_VAL = int(config["n_val"])
 N_TEST = int(config["n_test"])
@@ -92,9 +96,7 @@ rule create_zarr:
         random_seed = RANDOM_SEED,
         fields = ZARR_FIELDS,
     threads: 1
-    resources:
-        mem_mb = 16000,
-        runtime = "1h",
+    resources: **CPU_RESOURCES
     script:
         "scripts/create_zarr.py"
 
@@ -111,9 +113,7 @@ rule simulate_batch:
         batch_size = CHUNK_SIZE,
         simulator_config = config["simulator"],
     threads: 1
-    resources:
-        mem_mb = 16000,
-        runtime = "2h",
+    resources: **CPU_RESOURCES
     script:
         "scripts/simulate_ts_batch.py"
 
@@ -127,9 +127,7 @@ rule process_batch:
     output:
         done = os.path.join(TENSOR_DIR, "batch_{batch}.done"),
     threads: 1
-    resources:
-        mem_mb = 4000,
-        runtime = "1h",
+    resources: **CPU_RESOURCES
     params:
         batch_id = lambda wildcards: int(wildcards.batch),
         batch_size = CHUNK_SIZE,
@@ -149,15 +147,11 @@ rule train_embedding_net:
     log:
         tensorboard = os.path.join(LOG_DIR, "pretrain_embedding_network"),
     threads: 4
-    resources:
-        runtime = "4h",
-        mem_mb = 50000,
-        slurm_partition = "kerngpu,gpu",
-        gpus = 1,
-        slurm_extra = "--gres=gpu:1 --constraint=a100"
+    resources: **GPU_RESOURCES
     params:
         optimizer = config["optimizer"],
         batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
         learning_rate = config["learning_rate"],
         max_num_epochs = config["max_num_epochs"],
         stop_after_epochs = config["stop_after_epochs"],
@@ -179,15 +173,11 @@ rule train_npe_on_embeddings:
     log:
         tensorboard = os.path.join(LOG_DIR, "pretrain_normalizing_flow"),
     threads: 4
-    resources:
-        runtime = "4h",
-        mem_mb = 50000,
-        slurm_partition = "kerngpu,gpu",
-        gpus = 1,
-        slurm_extra = "--gres=gpu:1 --constraint=a100"
+    resources: **GPU_RESOURCES
     params:
         optimizer = config["optimizer"],
         batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
         learning_rate = config["learning_rate"],
         max_num_epochs = config["max_num_epochs"],
         stop_after_epochs = config["stop_after_epochs"],
@@ -209,15 +199,11 @@ rule train_npe_on_features:
     log:
         tensorboard = os.path.join(LOG_DIR, "embedding_normalizing_flow"),
     threads: 4
-    resources:
-        runtime = "4h",
-        mem_mb = 50000,
-        slurm_partition = "kerngpu,gpu",
-        gpus = 1,
-        slurm_extra = "--gres=gpu:1 --constraint=a100"
+    resources: **GPU_RESOURCES
     params:
         optimizer = config["optimizer"],
         batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
         learning_rate = config["learning_rate"],
         max_num_epochs = config["max_num_epochs"],
         stop_after_epochs = config["stop_after_epochs"],
@@ -243,14 +229,10 @@ rule plot_diagnostics:
         at_prior_low = os.path.join(PLOT_DIR, "posterior_at_prior_low.png"),
         at_prior_high = os.path.join(PLOT_DIR, "posterior_at_prior_high.png"),
     threads: 4
-    resources:
-        runtime = "4h",
-        mem_mb = 50000,
-        slurm_partition = "kerngpu,gpu",
-        gpus = 1,
-        slurm_extra = "--gres=gpu:1 --constraint=a100"
+    resources: **GPU_RESOURCES
     params:
         batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
         packed_sequence = config["packed_sequence"],
         simulator_config = config["simulator"],
         random_seed = RANDOM_SEED,

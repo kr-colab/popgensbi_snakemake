@@ -60,7 +60,7 @@ class Model(LightningModule):
             [num_samples], 
             x=embeddings, 
             show_progress_bars=False,
-        ).permute(1, 2, 0)
+        ).permute(1, 2, 0) # dimensions are (batch, parameter, npe sample)
         return samples, targets
 
 
@@ -69,6 +69,7 @@ dataset = ZarrDataset(
     snakemake.input.zarr, 
     split="sbi_test",
     packed_sequence=snakemake.params.packed_sequence,
+    use_cache=snakemake.params.use_cache,
 )
 loader = DataLoader(
     dataset,

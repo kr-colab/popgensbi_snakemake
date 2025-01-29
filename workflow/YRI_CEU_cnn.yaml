@@ -1,5 +1,16 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
+cpu_resources: # optional, used for CPU-only tasks (simulation)
+  runtime: "2h"
+  mem_mb: 16000
+
+gpu_resources: # optional, used for GPU tasks (training)
+  runtime: "4h"
+  mem_mb: 50000
+  gpus: 1
+  slurm_partition: "kerngpu,gpu"
+  slurm_extra: "--gres=gpu:1 --constraint=a100"
+
 project_dir: "/sietch_colab/natep/popgensbi/popgensbi_snakemake/YRI_CEU_dinf"
 
 random_seed: 1
@@ -8,7 +19,8 @@ n_train: 10000
 n_val: 1000
 n_test: 1000
 
-train_embedding_net_separately: False # train embedding network separately from normalizing flow
+train_embedding_net_separately: True # train embedding network separately from normalizing flow
+use_cache: True # load features into CPU memory
 optimizer: "Adam"
 batch_size: 32
 learning_rate: 0.0005

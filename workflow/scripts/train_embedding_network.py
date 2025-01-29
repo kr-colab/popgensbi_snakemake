@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
-from lightning import LightningModule, Trainer
+from lightning import LightningModule, Trainer, LightningDataModule
 
 import embedding_networks
 from data_handlers import ZarrDataset
@@ -14,40 +14,62 @@ from data_handlers import ZarrDataset
 torch.manual_seed(snakemake.params.random_seed)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Data loaders
-dataset = {}
-loader = {}
-for split in ["pre_val", "pre_train"]:
-    dataset[split] = ZarrDataset(
-        snakemake.input.zarr, 
-        split=split,
-        packed_sequence=snakemake.params.packed_sequence,
-    )
-    loader[split] = DataLoader(
-        dataset[split],
-        batch_size=snakemake.params.batch_size,
-        shuffle="train" in split,
-        num_workers=snakemake.threads,
-        pin_memory=True,  # Required for efficient non-blocking transfers
-        persistent_workers=True,
-        prefetch_factor=2,
-        drop_last=True,
-        collate_fn=dataset[split].make_collate_fn(),
-    )
+# Lightning wrapper around data loaders
+class DataModule(LightningDataModule):
+    def __init__(self):
+        super().__init__()
 
-# Normalise targets
-target_mean = torch.mean(dataset["pre_train"].theta, axis=0)
-target_prec = 1.0 / torch.std(dataset["pre_train"].theta, axis=0)
+    def setup(self, stage=None):
+        self.dataset = {}
+        for split in ["pre_train", "pre_val"]:
+            self.dataset[split] = ZarrDataset(
+                snakemake.input.zarr,
+                split=split,
+                packed_sequence=snakemake.params.packed_sequence,
+                use_cache=snakemake.params.use_cache,
+            )
 
-# Initialize model and determine output dimension
+    @staticmethod
+    def _dataloader(dataset, shuffle=True):
+        return DataLoader(
+            dataset,
+            batch_size=snakemake.params.batch_size,
+            shuffle=shuffle,
+            num_workers=snakemake.threads,
+            pin_memory=True,
+            persistent_workers=True,
+            prefetch_factor=2,
+            drop_last=True,
+            collate_fn=dataset.make_collate_fn(),
+        )
+
+    def train_dataloader(self):
+        return self._dataloader(self.dataset["pre_train"])
+
+    def val_dataloader(self):
+        return self._dataloader(self.dataset["pre_val"], shuffle=False)
+
+
+# Initialize model
 embedding_config = snakemake.params.embedding_config.copy()
 class_name = embedding_config.pop("class_name")
 embedding_net = getattr(embedding_networks, class_name)(**embedding_config)
-_, first_x = dataset["pre_train"][0] # skips packed_sequence
+
+# TODO: this is not particularily efficient as "setup" is run again by the
+# trainer, on a brand-new instantiation of the class. If we're caching stuff
+# then this involves costly decompression. Need to read up on the sequence of
+# events here.
+datamodule = DataModule()
+datamodule.setup()
+
+# Determine output dimension, target scaling
+_, first_x = datamodule.dataset["pre_train"][0] # skips packed_sequence
 first_output = embedding_net(first_x.unsqueeze(0))
 embedding_dim = first_output.size(-1)
+target_mean = torch.mean(datamodule.dataset["pre_train"].theta, axis=0)
+target_prec = 1.0 / torch.std(datamodule.dataset["pre_train"].theta, axis=0)
 
-# Lightning wrapper
+# Lightning wrapper around embedding net
 class Model(LightningModule):
     def __init__(self):
         super().__init__()
@@ -74,12 +96,6 @@ class Model(LightningModule):
 
     def validation_step(self, data):
         return self.loss(*data, log="val_loss")
-
-    def predict_step(self, data):
-        target, features = data
-        embedding = self.embedding_net(features)
-        prediction = self.projection(embedding) / self.target_prec + self.target_mean
-        return target, prediction
 
     def configure_optimizers(self):
         optimizer = getattr(torch.optim, snakemake.params.optimizer)
@@ -116,11 +132,7 @@ trainer = Trainer(
     logger=logger,
     callbacks=[save_best_model, stop_early],
 )
-trainer.fit(
-    model=model, 
-    train_dataloaders=loader["pre_train"], 
-    val_dataloaders=loader["pre_val"],
-)
+trainer.fit(model=model, datamodule=datamodule)
 
 # Save best model
 best_model = Model.load_from_checkpoint(f"{snakemake.output.network}.ckpt")

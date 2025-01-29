@@ -23,6 +23,8 @@ simulator = getattr(ts_simulators, model)(config)
 root = zarr.open(snakemake.input.zarr, "rw")
 for i in range(batch_size):
     idx = batch_start + i
+    if idx >= root.seed.size:
+        continue  # Skip if we've reached the end of the simulations
 
     # Simulate tree sequence
     ts, theta = simulator(seed=root.seed[idx])

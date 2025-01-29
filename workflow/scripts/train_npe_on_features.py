@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
-from lightning import LightningModule, Trainer
+from lightning import LightningModule, Trainer, LightningDataModule
 from sbi.neural_nets import posterior_nn
 
 import embedding_networks
@@ -15,38 +15,60 @@ torch.manual_seed(snakemake.params.random_seed)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Data loaders
-dataset = {}
-loader = {}
-for split in ["sbi_val", "sbi_train"]:
-    dataset[split] = ZarrDataset(
-        snakemake.input.zarr, 
-        split=split,
-        packed_sequence=snakemake.params.packed_sequence,
-    )
-    loader[split] = DataLoader(
-        dataset[split],
-        batch_size=snakemake.params.batch_size,
-        shuffle="train" in split,
-        num_workers=snakemake.threads,
-        pin_memory=True,  # Required for efficient non-blocking transfers
-        persistent_workers=True,
-        prefetch_factor=2,
-        drop_last=True,
-        collate_fn=dataset[split].make_collate_fn(),
-    )
+class DataModule(LightningDataModule):
+    def __init__(self):
+        super().__init__()
+
+    def setup(self, stage=None):
+        self.dataset = {}
+        for split in ["sbi_train", "sbi_val"]:
+            self.dataset[split] = ZarrDataset(
+                snakemake.input.zarr,
+                split=split,
+                packed_sequence=snakemake.params.packed_sequence,
+                use_cache=snakemake.params.use_cache,
+            )
+
+    @staticmethod
+    def _dataloader(dataset, shuffle=True):
+        return DataLoader(
+            dataset,
+            batch_size=snakemake.params.batch_size,
+            shuffle=shuffle,
+            num_workers=snakemake.threads,
+            pin_memory=True,
+            persistent_workers=True,
+            prefetch_factor=2,
+            drop_last=True,
+            collate_fn=dataset.make_collate_fn(),
+        )
+
+    def train_dataloader(self):
+        return self._dataloader(self.dataset["sbi_train"])
+
+    def val_dataloader(self):
+        return self._dataloader(self.dataset["sbi_val"], shuffle=False)
+
 
 # Set up embedding net
 embedding_config = snakemake.params.embedding_config.copy()
 class_name = embedding_config.pop("class_name")
 embedding_net = getattr(embedding_networks, class_name)(**embedding_config)
 
+# TODO: this is not particularily efficient as "setup" is run again by the
+# trainer, on a brand-new instantiation of the class. If we're caching stuff
+# then this involves costly decompression. Need to read up on the sequence of
+# events here.
+datamodule = DataModule()
+datamodule.setup()
+
 # Initialize model and determine output dimension
 # TODO: make various things, like "sbi_model", settable through config
 sbi_model = "maf_rqs"
 approximator = posterior_nn(model=sbi_model, z_score_x="none")
-_, first_x = dataset["sbi_train"][0] # skips packed_sequence
+_, first_x = datamodule.dataset["sbi_train"][0] # skips packed_sequence
 first_ex = embedding_net(first_x.unsqueeze(0)) # used to get latent dimension
-theta = dataset["sbi_train"].theta # used to get z-score scaling
+theta = datamodule.dataset["sbi_train"].theta # used to get z-score scaling
 
 # Lightning wrapper around embedding net + normalizing flow
 class Model(LightningModule):
@@ -102,11 +124,7 @@ trainer = Trainer(
     logger=logger,
     callbacks=[save_best_model, stop_early],
 )
-trainer.fit(
-    model=model, 
-    train_dataloaders=loader["sbi_train"], 
-    val_dataloaders=loader["sbi_val"],
-)
+trainer.fit(model=model, datamodule=datamodule)
 
 # Save best model
 best_model = Model.load_from_checkpoint(f"{snakemake.output.embedding_net}.ckpt")

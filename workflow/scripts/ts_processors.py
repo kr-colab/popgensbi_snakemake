@@ -12,6 +12,8 @@ class BaseProcessor:
             setattr(self, key, config.get(key, default))
 
 
+# TODO: something seems to be going wrong here if pops have different sizes
+# Not convinced the padding is working as intended
 class dinf_multiple_pops(BaseProcessor):
 
     default_config = {
@@ -60,6 +62,9 @@ class dinf_multiple_pops(BaseProcessor):
                 )
 
         output_mat = torch.stack([v for v in feature_matrices.values()]).permute(0, 3, 1, 2)
+        # the output tensor is (# populations, # channels, # individuals, # snps)
+        # where the number of channels is 2 (positions and genotypes)
+        # and -1 is padded on the bottom and right if # snps or # individuals differ
         return output_mat.numpy()
 
 
@@ -93,4 +98,7 @@ class genotypes_and_distances(BaseProcessor):
         # filter SNPs
         geno = geno[keep]
         geno = geno[:self.max_snps]
+        # the output tensor is (snps, individuals) with no padding,
+        # and will be ragged across simulations, with the SNP dimension not
+        # exceeding `max_snps`
         return geno

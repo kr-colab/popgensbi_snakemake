@@ -1,5 +1,16 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
+cpu_resources: # optional, used for CPU-only tasks (simulation)
+  runtime: "2h"
+  mem_mb: 16000
+
+gpu_resources: # optional, used for GPU tasks (training)
+  runtime: "4h"
+  mem_mb: 50000
+  gpus: 1
+  slurm_partition: "kerngpu,gpu"
+  slurm_extra: "--gres=gpu:1 --constraint=a100"
+
 project_dir: "/sietch_colab/natep/popgensbi/popgensbi_snakemake/YRI_CEU_dinf_bigger"
 
 random_seed: 1
