@@ -1,0 +1,241 @@
+import os
+import numpy as np
+
+# TODO: can't specify a full default config here, as snakemake will
+# take union of this and another configfile, leading to
+# errors b/c of optional arguments for embedding net
+
+# change this to the config file you want to use
+configfile: "workflow/YRI_CEU_rnn.yaml"
+
+CPU_RESOURCES = config.get("cpu_resources", {})
+GPU_RESOURCES = config.get("gpu_resources", {})
+
+# Simulation design
+N_TRAIN = int(config["n_train"])
+N_VAL = int(config["n_val"])
+N_TEST = int(config["n_test"])
+CHUNK_SIZE = int(config["chunk_size"])
+RANDOM_SEED = int(config["random_seed"])
+TRAIN_SEPARATELY = bool(config["train_embedding_net_separately"])
+
+# Directory structure
+SIMULATOR = config["simulator"]["class_name"]
+PROCESSOR = config["processor"]["class_name"]
+EMBEDDING = config["embedding_network"]["class_name"]
+UID = f"{SIMULATOR}-{PROCESSOR}-{EMBEDDING}-{RANDOM_SEED}-{N_TRAIN}"
+UID += "-trained_separately" if TRAIN_SEPARATELY else "-trained_end_to_end"
+PROJECT_DIR = os.path.join(config["project_dir"], UID)
+PLOT_DIR = os.path.join(PROJECT_DIR, "plots")
+LOG_DIR = os.path.join(PROJECT_DIR, "logs")
+TREE_DIR = os.path.join(PROJECT_DIR, "trees")
+TENSOR_DIR = os.path.join(PROJECT_DIR, "tensors")
+
+# Divvy up training instances into chunks
+SPLIT_SIZES = [N_TRAIN, N_VAL, N_TEST]
+SPLIT_NAMES = ["sbi_train", "sbi_val", "sbi_test"]
+ZARR_FIELDS = ["features", "targets"]
+if TRAIN_SEPARATELY:
+    SPLIT_SIZES += [N_TRAIN, N_VAL]
+    SPLIT_NAMES += ["pre_train", "pre_val"]
+N_CHUNK = (np.sum(SPLIT_SIZES) + CHUNK_SIZE - 1) // CHUNK_SIZE
+
+# Conditional naming of pickled networks
+EMBEDDING_NET_NAME = "embedding_network"
+NORMALIZING_FLOW_NAME = "normalizing_flow"
+if TRAIN_SEPARATELY:
+    EMBEDDING_NET_NAME = "pretrain_" + EMBEDDING_NET_NAME
+    NORMALIZING_FLOW_NAME = "pretrain_" + NORMALIZING_FLOW_NAME
+
+
+localrules: 
+    simulate_all,
+    process_all,
+    train_all,
+    analyze_all,
+
+
+rule analyze_all:
+    input:
+        expectation = os.path.join(PLOT_DIR, "posterior_expectation.png"),
+        calibration = os.path.join(PLOT_DIR, "posterior_calibration.png"),
+        concentration = os.path.join(PLOT_DIR, "posterior_concentration.png"),
+        at_prior_mean = os.path.join(PLOT_DIR, "posterior_at_prior_mean.png"),
+        at_prior_low = os.path.join(PLOT_DIR, "posterior_at_prior_low.png"),
+        at_prior_high = os.path.join(PLOT_DIR, "posterior_at_prior_high.png"),
+
+
+rule train_all:
+    input:
+        embedding_net = os.path.join(PROJECT_DIR, EMBEDDING_NET_NAME),
+        normalizing_flow = os.path.join(PROJECT_DIR, NORMALIZING_FLOW_NAME),
+
+
+rule process_all:
+    input:
+        expand(
+            os.path.join(TENSOR_DIR, "batch_{batch}.done"), 
+            batch=range(N_CHUNK),
+        )
+
+
+rule simulate_all:
+    input:
+        expand(
+            os.path.join(TREE_DIR, "batch_{batch}.done"), 
+            batch=range(N_CHUNK),
+        )
+
+
+rule create_zarr:
+    message: "Creating zarr dataset..."
+    output:
+        zarr = directory(os.path.join(TENSOR_DIR, "zarr"))
+    params:
+        split_sizes = SPLIT_SIZES,
+        split_names = SPLIT_NAMES,
+        chunk_size = CHUNK_SIZE,
+        random_seed = RANDOM_SEED,
+        fields = ZARR_FIELDS,
+    threads: 1
+    resources: **CPU_RESOURCES
+    script:
+        "scripts/create_zarr.py"
+
+
+rule simulate_batch:
+    message:
+        "Simulating batch {wildcards.batch} of tree sequences..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+    output:
+        done = os.path.join(TREE_DIR, "batch_{batch}.done")
+    params:
+        batch_id = lambda wildcards: int(wildcards.batch),
+        batch_size = CHUNK_SIZE,
+        simulator_config = config["simulator"],
+    threads: 1
+    resources: **CPU_RESOURCES
+    script:
+        "scripts/simulate_ts_batch.py"
+
+
+rule process_batch:
+    message:
+        "Processing batch {wildcards.batch} of tree sequences..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+        done = rules.simulate_batch.output.done,
+    output:
+        done = os.path.join(TENSOR_DIR, "batch_{batch}.done"),
+    threads: 1
+    resources: **CPU_RESOURCES
+    params:
+        batch_id = lambda wildcards: int(wildcards.batch),
+        batch_size = CHUNK_SIZE,
+        processor_config = config["processor"],
+    script: 
+        "scripts/process_ts_batch.py"
+
+
+rule train_embedding_net:
+    message:
+        "Training embedding network separately..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+        done = rules.process_all.input,
+    output:
+        network = os.path.join(PROJECT_DIR, "pretrain_embedding_network"),
+    log:
+        tensorboard = os.path.join(LOG_DIR, "pretrain_embedding_network"),
+    threads: 4
+    resources: **GPU_RESOURCES
+    params:
+        optimizer = config["optimizer"],
+        batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
+        learning_rate = config["learning_rate"],
+        max_num_epochs = config["max_num_epochs"],
+        stop_after_epochs = config["stop_after_epochs"],
+        clip_max_norm = config["clip_max_norm"],
+        packed_sequence = config["packed_sequence"],
+        embedding_config = config["embedding_network"],
+        random_seed = RANDOM_SEED,
+    script: "scripts/train_embedding_network.py"
+
+
+rule train_npe_on_embeddings:
+    message:
+        "Training posterior estimator with existing embeddings..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+        network = rules.train_embedding_net.output.network,
+    output:
+        network = os.path.join(PROJECT_DIR, "pretrain_normalizing_flow"),
+    log:
+        tensorboard = os.path.join(LOG_DIR, "pretrain_normalizing_flow"),
+    threads: 4
+    resources: **GPU_RESOURCES
+    params:
+        optimizer = config["optimizer"],
+        batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
+        learning_rate = config["learning_rate"],
+        max_num_epochs = config["max_num_epochs"],
+        stop_after_epochs = config["stop_after_epochs"],
+        clip_max_norm = config["clip_max_norm"],
+        packed_sequence = config["packed_sequence"],
+        random_seed = RANDOM_SEED,
+    script: "scripts/train_npe_on_embeddings.py"
+
+
+rule train_npe_on_features:
+    message:
+        "Training posterior estimator on features..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+        done = rules.process_all.input,
+    output:
+        embedding_net = os.path.join(PROJECT_DIR, "embedding_network"),
+        normalizing_flow = os.path.join(PROJECT_DIR, "normalizing_flow"),
+    log:
+        tensorboard = os.path.join(LOG_DIR, "embedding_normalizing_flow"),
+    threads: 4
+    resources: **GPU_RESOURCES
+    params:
+        optimizer = config["optimizer"],
+        batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
+        learning_rate = config["learning_rate"],
+        max_num_epochs = config["max_num_epochs"],
+        stop_after_epochs = config["stop_after_epochs"],
+        clip_max_norm = config["clip_max_norm"],
+        packed_sequence = config["packed_sequence"],
+        embedding_config = config["embedding_network"],
+        random_seed = RANDOM_SEED,
+    script: "scripts/train_npe_on_features.py"
+
+
+rule plot_diagnostics:
+    message:
+        "Plotting diagnostics..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+        embedding_net = rules.train_all.input.embedding_net,
+        normalizing_flow = rules.train_all.input.normalizing_flow,
+    output:
+        calibration = os.path.join(PLOT_DIR, "posterior_calibration.png"),
+        concentration = os.path.join(PLOT_DIR, "posterior_concentration.png"),
+        expectation = os.path.join(PLOT_DIR, "posterior_expectation.png"),
+        at_prior_mean = os.path.join(PLOT_DIR, "posterior_at_prior_mean.png"),
+        at_prior_low = os.path.join(PLOT_DIR, "posterior_at_prior_low.png"),
+        at_prior_high = os.path.join(PLOT_DIR, "posterior_at_prior_high.png"),
+    threads: 4
+    resources: **GPU_RESOURCES
+    params:
+        batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
+        packed_sequence = config["packed_sequence"],
+        simulator_config = config["simulator"],
+        random_seed = RANDOM_SEED,
+    script: "scripts/plot_diagnostics.py"

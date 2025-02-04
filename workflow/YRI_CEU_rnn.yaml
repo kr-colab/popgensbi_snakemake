@@ -1,0 +1,57 @@
+# --- top level arguments are ALWAYS REQUIRED --- #
+# change this to the project directory you want to use
+project_dir: "/projects/kernlab/adkern/popgensbi_snakemake/YRI_CEU_dinf_rnn"
+
+cpu_resources: # optional, used for CPU-only tasks (simulation)
+  runtime: "2h"
+  mem_mb: 16000
+
+# 8 hours is the default for RNN training on a single A100 with 10k samples
+gpu_resources: # optional, used for GPU tasks (training)
+  runtime: "8h"
+  mem_mb: 50000
+  gpus: 1
+  slurm_partition: "kerngpu,gpu"
+  slurm_extra: "--gres=gpu:1 --constraint=a100"
+
+
+random_seed: 1
+chunk_size: 100 # number of instances to simulate per worker
+n_train: 10000
+n_val: 1000
+n_test: 1000
+
+train_embedding_net_separately: True # train embedding network separately from normalizing flow
+optimizer: "Adam"
+batch_size: 32
+learning_rate: 0.0005
+max_num_epochs: 200
+stop_after_epochs: 20
+clip_max_norm: 5
+packed_sequence: True
+use_cache: True 
+
+simulator:
+  class_name: "YRI_CEU"
+  # OPTIONAL CLASS KWARGS:
+  sequence_length: 1000000
+  mutation_rate: 1.5e-8
+  recombination_rate: 1.5e-8
+  samples:
+    YRI: 10
+    CEU: 10
+
+processor:
+  class_name: "genotypes_and_distances"
+  # OPTIONAL CLASS KWARGS:
+  max_snps: 20000
+  phased: False
+  min_freq: 0.00
+  max_freq: 1.00
+
+embedding_network:
+  class_name: "RNN"
+  # OPTIONAL CLASS KWARGS:
+  input_size: 21 # num individuals + 1
+  output_size: 64
+
