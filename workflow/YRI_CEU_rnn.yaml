@@ -1,17 +1,19 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
+# change this to the project directory you want to use
+project_dir: "/projects/kernlab/adkern/popgensbi_snakemake/YRI_CEU_dinf_rnn"
 
 cpu_resources: # optional, used for CPU-only tasks (simulation)
   runtime: "2h"
   mem_mb: 16000
 
+# 8 hours is the default for RNN training on a single A100 with 10k samples
 gpu_resources: # optional, used for GPU tasks (training)
-  runtime: "4h"
+  runtime: "8h"
   mem_mb: 50000
   gpus: 1
   slurm_partition: "kerngpu,gpu"
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
-project_dir: "/sietch_colab/natep/popgensbi/popgensbi_snakemake/YRI_CEU_dinf_bigger"
 
 random_seed: 1
 chunk_size: 100 # number of instances to simulate per worker
@@ -27,6 +29,7 @@ max_num_epochs: 200
 stop_after_epochs: 20
 clip_max_norm: 5
 packed_sequence: True
+use_cache: True 
 
 simulator:
   class_name: "YRI_CEU"

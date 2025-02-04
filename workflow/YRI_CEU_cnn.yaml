@@ -1,5 +1,8 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
+# change this to the project directory you want to use
+project_dir: "/projects/kernlab/adkern/popgensbi_snakemake/YRI_CEU_dinf"
+
 cpu_resources: # optional, used for CPU-only tasks (simulation)
   runtime: "2h"
   mem_mb: 16000
@@ -10,8 +13,6 @@ gpu_resources: # optional, used for GPU tasks (training)
   gpus: 1
   slurm_partition: "kerngpu,gpu"
   slurm_extra: "--gres=gpu:1 --constraint=a100"
-
-project_dir: "/sietch_colab/natep/popgensbi/popgensbi_snakemake/YRI_CEU_dinf"
 
 random_seed: 1
 chunk_size: 100 # number of instances to simulate per worker

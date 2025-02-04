@@ -4,7 +4,9 @@ import numpy as np
 # TODO: can't specify a full default config here, as snakemake will
 # take union of this and another configfile, leading to
 # errors b/c of optional arguments for embedding net
-#configfile: "workflow/YRI_CEU_dinf.yaml"
+
+# change this to the config file you want to use
+configfile: "workflow/YRI_CEU_rnn.yaml"
 
 CPU_RESOURCES = config.get("cpu_resources", {})
 GPU_RESOURCES = config.get("gpu_resources", {})
