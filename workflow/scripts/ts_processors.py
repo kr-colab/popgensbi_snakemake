@@ -102,3 +102,39 @@ class genotypes_and_distances(BaseProcessor):
         # and will be ragged across simulations, with the SNP dimension not
         # exceeding `max_snps`
         return geno
+
+class dinf_extract(BaseProcessor):
+    """
+    Extract a genotype matrix from a tree sequence using dinf's feature extractor
+    """
+    params_default = {
+        "n_snps": 500,
+        "ploidy": 2,
+        "phased": False,
+        "maf_thresh": 0.05
+    }
+    def __init__(self, snakemake):
+        super().__init__(snakemake, dinf_extract.params_default)
+
+    def __call__(self, ts):        
+        '''
+        input : tree sequence of one population
+        output : genotype matrix + positional encoding (dinf's format)
+        '''
+        if self.ploidy == 2:
+            if self.phased == False:
+                n_sample = int(ts.num_samples / self.ploidy)
+            else:
+                n_sample = ts.num_samples
+        elif self.ploidy == 1:
+            n_sample = ts.num_samples
+            
+        extractor = dinf.feature_extractor.HaplotypeMatrix(
+            num_individuals=n_sample, 
+            num_loci=self.n_snps,
+            ploidy=self.ploidy,
+            phased=self.phased,
+            maf_thresh=self.maf_thresh
+        )
+        feature_matrix = extractor.from_ts(ts)
+        return np.transpose(feature_matrix, (2, 0, 1))
