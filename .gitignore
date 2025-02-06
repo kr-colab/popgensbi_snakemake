@@ -25,3 +25,5 @@ config/amortized_msprime/testing.yaml
 *.egg-info
 docs/_build/**
 sbi_dev/.pixi
+*.done
+*.trees

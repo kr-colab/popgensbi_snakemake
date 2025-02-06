@@ -41,7 +41,7 @@ simulator:
     CEU: 10
 
 processor:
-  class_name: "dinf_multiple_pops"
+  class_name: "cnn_extract"
   # OPTIONAL CLASS KWARGS:
   n_snps: 2000
   maf_thresh: 0.05
