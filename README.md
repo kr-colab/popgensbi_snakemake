@@ -1,7 +1,7 @@
 # Snakemake workflow: `popgensbi`
 
 [![Snakemake](https://img.shields.io/badge/snakemake-≥6.3.0-brightgreen.svg)](https://snakemake.github.io)
-[![Read the Docs](https://img.shields.io/readthedocs/pip/stable.svg)](https://popgensbi-snakemake.readthedocs.io/en/stable/)
+[![Read the Docs](https://img.shields.io/readthedocs/pip/stable.svg)](https://popgensbi-snakemake.readthedocs.io/en/latest/)
 
 
 
@@ -11,7 +11,7 @@ A Snakemake workflow for simulation-based inference in population genetics.
 ## Contents
 
 The main workflow for this package is contained in `workflow/Snakefile`. 
-This will run a complete neural posterior estimation workflow based on a given config file. For more details, see the [docs](https://popgensbi-snakemake.readthedocs.io/en/stable/).
+This will run a complete neural posterior estimation workflow based on a given config file. For more details, see the [docs](https://popgensbi-snakemake.readthedocs.io/en/latest/).
 
 ## Environment setup
 
