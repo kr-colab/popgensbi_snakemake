@@ -9,7 +9,6 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
-  - pytorch-cuda=11.8 # comment this out if cuda isn't available
   - stdpopsim
   - msprime
   - dadi
