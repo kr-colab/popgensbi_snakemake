@@ -1,13 +1,13 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/projects/kernlab/adkern/popgensbi_snakemake/YRI_CEU_dinf"
+project_dir: "/home/adkern/popgensbi_snakemake/AraTha_2epoch_dinf"
 
-cpu_resources: # optional, used for CPU-only tasks (simulation)
+cpu_resources:
   runtime: "2h"
   mem_mb: 16000
 
-gpu_resources: # optional, used for GPU tasks (training)
+gpu_resources: 
   runtime: "4h"
   mem_mb: 50000
   gpus: 1
@@ -16,9 +16,9 @@ gpu_resources: # optional, used for GPU tasks (training)
 
 random_seed: 1
 chunk_size: 100 # number of instances to simulate per worker
-n_train: 10000
-n_val: 1000
-n_test: 1000
+n_train: 1000
+n_val: 100
+n_test: 100
 
 train_embedding_net_separately: True # train embedding network separately from normalizing flow
 use_cache: True # load features into CPU memory
@@ -28,28 +28,26 @@ learning_rate: 0.0005
 max_num_epochs: 200
 stop_after_epochs: 20
 clip_max_norm: 5
-packed_sequence: False
+packed_sequence: True
 
 simulator:
-  class_name: "YRI_CEU"
+  class_name: "AraTha_2epoch"
   # OPTIONAL CLASS KWARGS:
   sequence_length: 1000000
   mutation_rate: 1.5e-8
   recombination_rate: 1.5e-8
   samples:
-    YRI: 10
-    CEU: 10
+    SouthMiddleAtlas: 20
 
 processor:
-  class_name: "cnn_extract"
+  class_name: "genotypes_and_distances"
   # OPTIONAL CLASS KWARGS:
   n_snps: 2000
   maf_thresh: 0.05
 
 embedding_network:
-  class_name: "ExchangeableCNN_IN"
+  class_name: "RNN"
   # OPTIONAL CLASS KWARGS:
-  output_dim: 64
-  input_rows: [10, 10]
-  input_cols: [2000, 2000]
+  input_size: 21 # num individuals + 1
+  output_size: 64
 
