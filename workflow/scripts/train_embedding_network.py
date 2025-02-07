@@ -53,6 +53,9 @@ class DataModule(LightningDataModule):
 # Initialize model
 embedding_config = snakemake.params.embedding_config.copy()
 class_name = embedding_config.pop("class_name")
+if class_name == "SummaryStatisticsEmbedding":
+    # Remove all unnecessary parameters
+    embedding_config = {}  # Clear the config for this specific class
 embedding_net = getattr(embedding_networks, class_name)(**embedding_config)
 
 # TODO: this is not particularily efficient as "setup" is run again by the

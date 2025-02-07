@@ -130,7 +130,21 @@ embedding_network:
   input_rows: [10, 10]
   input_cols: [100, 100]
 '''
+        sum_stats_config = '''
+packed_sequence: False
 
+processor:
+  class_name: "tskit_sfs"
+  sample_sets: [YRI, CEU]
+  windows: null
+  mode: "site"
+  span_normalise: True
+  polarised: True
+  
+embedding_network:
+  class_name: "SummaryStatisticsEmbedding"
+'''
+  
         e2e_config = '''
 train_embedding_net_separately: False
 '''
@@ -149,7 +163,7 @@ use_cache: False
 
         # --- test runs --- #
         for sim in ["YRI_CEU"]:
-            for arch in ["RNN", "CNN"]:
+            for arch in ["RNN", "CNN", "SUMMARY_STATS"]:
                 for strategy in ["E2E", "SEP"]:
                     for cache in ["MEM", "DISK"]:
                         base = f"{sim}-{arch}-{strategy}-{cache}"
@@ -163,7 +177,7 @@ use_cache: False
                             f.write(config)
                             f.write(f'project_dir: "{full_base}"\n')
                             f.write(yri_ce_config)
-                            f.write(rnn_config if arch == "RNN" else cnn_config)
+                            f.write(rnn_config if arch == "RNN" else cnn_config if arch == "CNN" else sum_stats_config)
                             f.write(e2e_config if strategy == "E2E" else sep_config)
                             f.write(mem_config if cache == "MEM" else disk_config)
 

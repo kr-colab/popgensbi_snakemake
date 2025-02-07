@@ -5,8 +5,6 @@ import numpy as np
 # take union of this and another configfile, leading to
 # errors b/c of optional arguments for embedding net
 
-# change this to the config file you want to use
-configfile: "workflow/AraTha_2epoch_cnn.yaml"
 
 CPU_RESOURCES = config.get("cpu_resources", {})
 GPU_RESOURCES = config.get("gpu_resources", {})

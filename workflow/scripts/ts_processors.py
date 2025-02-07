@@ -144,27 +144,28 @@ class tskit_sfs(BaseProcessor):
     def __call__(self, ts: tskit.TreeSequence) -> torch.Tensor:
         # Get number of populations with samples
         sampled_pops = [i for i in range(ts.num_populations) if len(ts.samples(population=i)) > 0]
-        
+
         if len(sampled_pops) == 1:
             # Single population case
             sfs = ts.allele_frequency_spectrum(
-                sample_sets=self.sample_sets,
+                sample_sets=[ts.samples(population=sampled_pops[0])],
                 windows=self.windows,
                 mode=self.mode,
                 span_normalise=self.span_normalise,
                 polarised=self.polarised
             )
-            sfs = sfs / sum(sfs)
+            sfs = sfs / np.sum(sfs)
         else:
             # Multiple populations case
+            sample_sets = [ts.samples(population=i) for i in sampled_pops]
             sfs = ts.allele_frequency_spectrum(
-                sample_sets=[ts.samples(population=i) for i in sampled_pops],
+                sample_sets=sample_sets,
                 windows=self.windows,
                 mode=self.mode,
                 span_normalise=self.span_normalise,
                 polarised=self.polarised
             )
-            sfs = sfs / sum(sum(sfs))
+            sfs = sfs / np.sum(sfs)
         
         return sfs
 
