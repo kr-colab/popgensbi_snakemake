@@ -13,10 +13,18 @@ from sbi.utils import BoxUniform
 
 import ts_simulators
 from data_handlers import ZarrDataset
-
+from utils import get_least_busy_gpu
 rng = np.random.default_rng(snakemake.params.random_seed)
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
+# Determine the device
+if torch.cuda.is_available():
+    best_gpu = get_least_busy_gpu()
+    device = f"cuda:{best_gpu}"
+    devices = [best_gpu]  # Set devices to the least busy GPU
+else:
+    device = "cpu"
+    devices = 1  # Ensure CPU compatibility
+    
 # Get information from prior
 simulator_config = snakemake.params.simulator_config
 simulator = getattr(ts_simulators, simulator_config["class_name"])(simulator_config)
@@ -84,8 +92,8 @@ loader = DataLoader(
 )
 model = Model()
 trainer = Trainer(
-    accelerator=device,
-    devices=1,
+    accelerator="gpu" if device.startswith("cuda") else "cpu",
+    devices=devices,
     logger=False,
 )
 samples = trainer.predict(model=model, dataloaders=loader)

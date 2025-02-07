@@ -24,3 +24,5 @@ dependencies:
     - msprime
     - stdpopsim
     - dadi
+    - pytest
+    - pytest-xdist

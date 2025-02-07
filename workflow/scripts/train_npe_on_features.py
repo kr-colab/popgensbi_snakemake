@@ -10,9 +10,18 @@ from sbi.neural_nets import posterior_nn
 
 import embedding_networks
 from data_handlers import ZarrDataset
+from utils import get_least_busy_gpu
 
 torch.manual_seed(snakemake.params.random_seed)
-device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Determine the device
+if torch.cuda.is_available():
+    best_gpu = get_least_busy_gpu()
+    device = f"cuda:{best_gpu}"
+    devices = [best_gpu]  # Set devices to the least busy GPU
+else:
+    device = "cpu"
+    devices = 1  # Ensure CPU compatibility
 
 # Data loaders
 class DataModule(LightningDataModule):
@@ -117,8 +126,8 @@ stop_early = EarlyStopping(
 )
 trainer = Trainer(
     max_epochs=snakemake.params.max_num_epochs,
-    accelerator=device,
-    devices=1, # TODO: enable multi-gpu training
+    accelerator="gpu" if device.startswith("cuda") else "cpu",
+    devices=devices,
     default_root_dir=os.path.dirname(snakemake.output.embedding_net),
     gradient_clip_val=snakemake.params.clip_max_norm,
     logger=logger,
