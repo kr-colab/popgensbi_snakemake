@@ -142,3 +142,30 @@ class ExchangeableCNN_IN(nn.Module):
         # Otherwise we know there are no padded values and can just run the
         # input data through the network
         return self.feature_extractor(self.globalpool(self.symmetric(self.cnn(x))))
+    
+class SummaryStatisticsEmbedding(nn.Module):
+    """
+    Embed summary statistics of a tree sequence.
+    This is simply an identity layer that takes in a tensor of summary statistics
+    (e.g., SFS) and outputs the same tensor.
+
+    For single population SFS: input shape is (num_samples + 1,)
+    For joint SFS: input shape is (num_samples_pop1 + 1, num_samples_pop2 + 1)
+    """
+    def __init__(self, output_dim=None):
+        super().__init__()
+        self.identity = nn.Identity()
+
+    def forward(self, x):
+        # Ensure input is a torch tensor and flatten if needed
+        if not isinstance(x, torch.Tensor):
+            x = torch.from_numpy(x).float()
+        return self.identity(x.reshape(x.shape[0], -1))
+
+    def embedding(self, x):
+        """
+        Consistent with other embedding networks, provide an embedding method
+        that returns the same output as forward() since this is an identity layer
+        """
+        with torch.no_grad():
+            return self.forward(x)

@@ -10,9 +10,19 @@ from lightning import LightningModule, Trainer, LightningDataModule
 
 import embedding_networks
 from data_handlers import ZarrDataset
+from utils import get_least_busy_gpu
 
 torch.manual_seed(snakemake.params.random_seed)
-device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+# Determine the device
+if torch.cuda.is_available():
+    best_gpu = get_least_busy_gpu()
+    device = f"cuda:{best_gpu}"
+    devices = [best_gpu]  # Set devices to the least busy GPU
+else:
+    device = "cpu"
+    devices = 1  # Ensure CPU compatibility
 
 # Lightning wrapper around data loaders
 class DataModule(LightningDataModule):
@@ -53,6 +63,9 @@ class DataModule(LightningDataModule):
 # Initialize model
 embedding_config = snakemake.params.embedding_config.copy()
 class_name = embedding_config.pop("class_name")
+if class_name == "SummaryStatisticsEmbedding":
+    # Remove all unnecessary parameters
+    embedding_config = {}  # Clear the config for this specific class
 embedding_net = getattr(embedding_networks, class_name)(**embedding_config)
 
 # TODO: this is not particularily efficient as "setup" is run again by the
@@ -125,8 +138,8 @@ stop_early = EarlyStopping(
 )
 trainer = Trainer(
     max_epochs=snakemake.params.max_num_epochs,
-    accelerator=device,
-    devices=1, # TODO: enable multi-GPU training
+    accelerator="gpu" if device.startswith("cuda") else "cpu",
+    devices=devices,
     default_root_dir=os.path.dirname(snakemake.output.network),
     gradient_clip_val=snakemake.params.clip_max_norm,
     logger=logger,

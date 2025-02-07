@@ -123,3 +123,49 @@ class cnn_extract(BaseProcessor):
             # - Channels are positions and genotypes
             # - Padded with -1 if # individuals differ
             return output_mat.numpy()
+        
+class tskit_sfs(BaseProcessor):
+    '''
+    Site frequency spectrum processor that handles both single and multiple populations.
+    For single population: returns normalized SFS
+    For multiple populations: returns normalized joint SFS
+    '''
+    default_config = {
+        "sample_sets": None,
+        "windows": None,
+        "mode": "site",
+        "span_normalise": False,
+        "polarised": False
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+
+    def __call__(self, ts: tskit.TreeSequence) -> torch.Tensor:
+        # Get number of populations with samples
+        sampled_pops = [i for i in range(ts.num_populations) if len(ts.samples(population=i)) > 0]
+
+        if len(sampled_pops) == 1:
+            # Single population case
+            sfs = ts.allele_frequency_spectrum(
+                sample_sets=[ts.samples(population=sampled_pops[0])],
+                windows=self.windows,
+                mode=self.mode,
+                span_normalise=self.span_normalise,
+                polarised=self.polarised
+            )
+            sfs = sfs / np.sum(sfs)
+        else:
+            # Multiple populations case
+            sample_sets = [ts.samples(population=i) for i in sampled_pops]
+            sfs = ts.allele_frequency_spectrum(
+                sample_sets=sample_sets,
+                windows=self.windows,
+                mode=self.mode,
+                span_normalise=self.span_normalise,
+                polarised=self.polarised
+            )
+            sfs = sfs / np.sum(sfs)
+        
+        return sfs
+
