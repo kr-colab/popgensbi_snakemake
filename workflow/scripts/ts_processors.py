@@ -2,14 +2,19 @@ import dinf
 import tskit
 import torch
 import numpy as np
-
+import moments
+from moments.LD import Parsing
+from moments.LD.Parsing import compute_ld_statistics
 from dinf.misc import ts_individuals
+import os
+from functools import partial
+import ray
 
 
 class BaseProcessor:
     def __init__(self, config: dict, default: dict):
-        for key, default in default.items():
-            setattr(self, key, config.get(key, default))
+        for key, value in default.items():
+            setattr(self, key, config.get(key, value))
 
 class genotypes_and_distances(BaseProcessor):
 
@@ -169,3 +174,147 @@ class tskit_sfs(BaseProcessor):
         
         return sfs
 
+class moments_LD_stats(BaseProcessor):
+    '''
+    Processor that computes LD statistics using moments.LD.Parsing.compute_ld_statistics.
+    This processor extracts segments from the tree sequence, writes temporary VCF files,
+    computes LD statistics using the provided b_bins, and returns a flattened vector
+    of stacked LD statistics.
+    '''
+    default_config = {
+        "pop_file": "pop_file.txt",
+        "pops": None,
+        "bp_bins": [1e2, 1e3],
+        "n_segs": 1,
+        "use_genotypes": True,  # False for phased data
+        "ts_processor": os.path.join("output_directory", "moments_ld"),  # Specify a subdirectory
+    }
+    
+    def __init__(self, config: dict):
+        try:
+            import snakemake
+            self.datadir = snakemake.config.get('project_dir', '.')
+        except (ImportError, AttributeError):
+            self.datadir = '.'
+            
+        config['datadir'] = self.datadir
+        super().__init__(config, self.default_config)
+        self.randn = np.random.randint(0, 9999999)
+        
+        # Initialize ray once during initialization
+        if not ray.is_initialized():
+            num_cpus = 10
+            ray.init(num_cpus=num_cpus)
+    
+    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
+        # Create output directory for VCF files if it doesn't exist
+        vcf_dir = os.path.join(self.datadir, self.ts_processor)
+        os.makedirs(vcf_dir, exist_ok=True)
+
+        # Define remote function for processing segments
+        @ray.remote
+        def process_segment(seg_idx, datadir, ts_processor, ts, seg_len, randn, 
+                           pops, bp_bins):
+            # Include the function definition here instead of importing
+            def get_ld_stats(seg_idx, datadir, ts_processor, ts, seg_len, randn, 
+                            pops, bp_bins):
+                # Create output directory in the worker
+                vcf_dir = os.path.join(datadir, ts_processor)
+                os.makedirs(vcf_dir, exist_ok=True)
+                
+                vcf_name = os.path.join(vcf_dir, f"{randn}_seg_{seg_idx}.vcf")
+                site_mask = np.ones(ts.num_sites, dtype=bool)
+                # Unmask only those sites within the segment boundaries
+                for site in ts.sites():
+                    if seg_idx * seg_len < site.position < (seg_idx + 1) * seg_len:
+                        site_mask[site.id] = 0
+                
+                # Write VCF file
+                with open(vcf_name, "w+") as fout:
+                    ts.write_vcf(fout, site_mask=site_mask)
+                
+                # Read VCF header to get sample names
+                with open(vcf_name, 'r') as f:
+                    for line in f:
+                        if line.startswith('#CHROM'):
+                            header = line.strip().split('\t')
+                            sample_names = header[9:]  # Get sample columns (after FORMAT)
+                            break
+                
+                # Create the population file in the same directory as the VCF
+                pop_file_path = os.path.join(vcf_dir, "pop_file.txt")
+                if not os.path.exists(pop_file_path):
+                    with open(pop_file_path, "w") as f:
+                        f.write("sample pop\n")  # Write header
+                        for sample in sample_names:
+                            # Get population ID from the sample index
+                            sample_idx = int(sample.replace('tsk_', ''))
+                            pop_id = ts.node(sample_idx).population
+                            pop_obj = ts.population(pop_id)
+                            if pop_obj.metadata is not None and "name" in pop_obj.metadata:
+                                pop_name = pop_obj.metadata["name"]
+                            else:
+                                pop_name = f"pop{pop_id}"
+                            f.write(f"{sample} {pop_name}\n")
+
+                os.system(f"gzip {vcf_name}")
+                ld_stat = moments.LD.Parsing.compute_ld_statistics(
+                    f"{vcf_name}.gz",
+                    pop_file=pop_file_path,
+                    pops=pops,
+                    bp_bins=bp_bins,
+                    report=True
+                )
+                os.system(f"rm {vcf_name}.gz")
+                os.system(f"rm {vcf_name[:-3]}h5")
+                return ld_stat
+
+            return get_ld_stats(seg_idx, datadir, ts_processor, ts, seg_len, randn,
+                              pops, bp_bins)
+
+        # Get the length of each segment
+        seg_len = int(ts.sequence_length / self.n_segs)
+        
+        # Create remote tasks
+        futures = []
+        for seg_idx in range(self.n_segs):
+            # output logging as to which segment is being processed
+            print(f"Processing segment {seg_idx} of {self.n_segs}")
+            futures.append(process_segment.remote(
+                seg_idx,
+                self.datadir,
+                self.ts_processor,
+                ts,
+                seg_len,
+                self.randn,
+                self.pops,
+                self.bp_bins
+            ))
+
+        # Get results
+        ld_stats = ray.get(futures)
+        
+        # Convert to dictionary format
+        ld_stats_dict = {i: stat for i, stat in enumerate(ld_stats)}
+        
+        # Extract stats and compute means from the collected segment data.
+        stats = ld_stats_dict[0]["stats"]
+        means = moments.LD.Parsing.means_from_region_data(ld_stats_dict, stats)
+        
+        output = []
+        # Stack means of D2, Dz and pi2.
+        for i in range(len(means) - 1):
+            output.append(means[i])
+        
+        rep = len(output[0])
+        # Append a replicate of H.
+        for i in range(len(means[-1])):
+            output.append(np.repeat(means[-1][i], rep))
+        
+        output = np.stack(output)
+        # Return flattened output.
+        return output.flatten()
+
+    def __del__(self):
+        if ray.is_initialized():
+            ray.shutdown()

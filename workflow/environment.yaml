@@ -26,3 +26,6 @@ dependencies:
     - dadi
     - pytest
     - pytest-xdist
+    - moments-popgen
+    - ray
+    - scikit-allel
