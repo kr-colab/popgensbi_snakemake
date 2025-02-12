@@ -171,10 +171,10 @@ class SummaryStatisticsEmbedding(nn.Module):
         with torch.no_grad():
             return self.forward(x)
 
-class SPIDNA(nn.Module):
+class SPIDNA_embedding_network(nn.Module):
     """
-    SPIDNA architecture
-
+    SPIDNA architecture for processing genetic data.
+    
     Parameters
     ----------
     output_dim : int
@@ -183,78 +183,87 @@ class SPIDNA(nn.Module):
         Number of SPIDNA blocks in the network
     num_feature : int
         Number of features in the convolutional layers
-    **kwargs : dict
-        Additional keyword arguments
     """
-    def __init__(self, output_dim=64, num_block=3, num_feature=32, **kwargs):
+    def __init__(self, output_dim=64, num_block=3, num_feature=32):
         super().__init__()
         self.output_dim = output_dim
-        self.conv_pos = nn.Conv2d(1, num_feature, (1, 3))
+        self.num_feature = num_feature
+        # Initialize convolutional layers with padding
+        self.conv_pos = nn.Conv2d(1, num_feature, (1, 3), padding=(0, 1))
         self.conv_pos_bn = nn.BatchNorm2d(num_feature)
-        self.conv_snp = nn.Conv2d(1, num_feature, (1, 3))
+        self.conv_snp = nn.Conv2d(1, num_feature, (1, 3), padding=(0, 1))
         self.conv_snp_bn = nn.BatchNorm2d(num_feature)
-        self.blocks = nn.ModuleList([SPIDNABlock(output_dim, num_feature) for i in range(num_block)])
+        # Create SPIDNA blocks
+        self.blocks = nn.ModuleList([SPIDNABlock(num_feature, output_dim) for _ in range(num_block)])
 
     def forward(self, x):
-        # Get device from input tensor
-        device = x.device
+        # Reshape input: (batch, channels, samples, snps)
+        if len(x.shape) == 5:
+            x = x.squeeze(1)
         
-        pos = x[:, 0, :].view(x.shape[0], 1, 1, -1)
-        snp = x[:, 1:, :].unsqueeze(1)
-        pos = F.relu(self.conv_pos_bn(self.conv_pos(pos))).expand(-1, -1, snp.size(2), -1)
+        # Split and reshape position and SNP data
+        pos = x[:, 0, :].view(x.shape[0], 1, 1, -1)  # Shape: (batch, 1, 1, snps)
+        snp = x[:, 1:, :].unsqueeze(1)  # Shape: (batch, 1, samples, snps)
+        
+        # Process position data and expand to match SNP dimensions
+        pos = F.relu(self.conv_pos_bn(self.conv_pos(pos)))
+        pos = pos.expand(-1, -1, snp.size(2), -1)
+        
+        # Process SNP data
         snp = F.relu(self.conv_snp_bn(self.conv_snp(snp)))
-        x = torch.cat((pos, snp), 1)
-        output = torch.zeros(x.size(0), self.output_dim, device=device)
+        
+        # Combine features
+        x = torch.cat((pos, snp), dim=1)
+        
+        # Initialize output tensor
+        output = torch.zeros(x.size(0), self.output_dim, device=x.device)
+        
+        # Process through SPIDNA blocks
         for block in self.blocks:
             x, output = block(x, output)
+            
         return output
 
     def embedding(self, x):
-        """
-        Compute the embedding of input data without gradients.
-        
-        Parameters
-        ----------
-        x : torch.Tensor or numpy.ndarray
-            Input tensor containing position and SNP data
-            
-        Returns
-        -------
-        torch.Tensor
-            Embedded representation of the input data
-        """
         if not isinstance(x, torch.Tensor):
             x = torch.from_numpy(x).float()
         with torch.no_grad():
             return self.forward(x)
 
+
 class SPIDNABlock(nn.Module):
-    """
-    A block in the SPIDNA network that processes features and updates the output.
-    
-    Parameters
-    ----------
-    output_dim : int
-        Dimension of the output feature vector
-    num_feature : int
-        Number of features in the convolutional layers
-    """
-    def __init__(self, output_dim, num_feature):
+    def __init__(self, num_feature, output_dim):
         super().__init__()
-        self.output_dim = output_dim
-        self.phi = nn.Conv2d(num_feature * 2, num_feature, (1, 3))
+        # Add padding to maintain spatial dimensions
+        self.phi = nn.Conv2d(num_feature * 2, num_feature, (1, 3), padding=(0, 1))
         self.phi_bn = nn.BatchNorm2d(num_feature * 2)
         self.maxpool = nn.MaxPool2d((1, 2))
-        self.fc = nn.Linear(output_dim, output_dim)
+        self.fc = nn.Linear(num_feature, output_dim)
 
     def forward(self, x, output):
-        x = self.phi(self.phi_bn(x))
-        psi1 = torch.mean(x, 2, keepdim=True)
-        psi = psi1
-        current_output = self.fc(torch.mean(psi[:, :self.output_dim, :, :], 3).squeeze(2))
+        # Apply batch norm and convolution
+        x = self.phi_bn(x)
+        x = self.phi(x)
+        
+        # Average over samples dimension
+        psi = torch.mean(x, 2, keepdim=True)
+        
+        # Process current output
+        current_features = torch.mean(psi, 3).squeeze(2)
+        current_output = self.fc(current_features)
+        
+        # Add to running output - let device placement be handled by Lightning
         output = output + current_output
+        
+        # Expand psi and combine with x
         psi = psi.expand(-1, -1, x.size(2), -1)
         x = torch.cat((x, psi), 1)
-        x = F.relu(self.maxpool(x))
+        
+        # Apply maxpool if spatial dimension is large enough
+        if x.size(3) > 1:
+            x = F.relu(self.maxpool(x))
+        else:
+            x = F.relu(x)
+        
         return x, output
 
