@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 # TODO:
 # - make this "exchangeable" by shuffling all columns but the last (requires handling packed_sequence separately)
@@ -169,3 +170,91 @@ class SummaryStatisticsEmbedding(nn.Module):
         """
         with torch.no_grad():
             return self.forward(x)
+
+class SPIDNA(nn.Module):
+    """
+    SPIDNA architecture
+
+    Parameters
+    ----------
+    output_dim : int
+        Dimension of the output feature vector
+    num_block : int
+        Number of SPIDNA blocks in the network
+    num_feature : int
+        Number of features in the convolutional layers
+    **kwargs : dict
+        Additional keyword arguments
+    """
+    def __init__(self, output_dim=64, num_block=3, num_feature=32, **kwargs):
+        super().__init__()
+        self.output_dim = output_dim
+        self.conv_pos = nn.Conv2d(1, num_feature, (1, 3))
+        self.conv_pos_bn = nn.BatchNorm2d(num_feature)
+        self.conv_snp = nn.Conv2d(1, num_feature, (1, 3))
+        self.conv_snp_bn = nn.BatchNorm2d(num_feature)
+        self.blocks = nn.ModuleList([SPIDNABlock(output_dim, num_feature) for i in range(num_block)])
+
+    def forward(self, x):
+        # Get device from input tensor
+        device = x.device
+        
+        pos = x[:, 0, :].view(x.shape[0], 1, 1, -1)
+        snp = x[:, 1:, :].unsqueeze(1)
+        pos = F.relu(self.conv_pos_bn(self.conv_pos(pos))).expand(-1, -1, snp.size(2), -1)
+        snp = F.relu(self.conv_snp_bn(self.conv_snp(snp)))
+        x = torch.cat((pos, snp), 1)
+        output = torch.zeros(x.size(0), self.output_dim, device=device)
+        for block in self.blocks:
+            x, output = block(x, output)
+        return output
+
+    def embedding(self, x):
+        """
+        Compute the embedding of input data without gradients.
+        
+        Parameters
+        ----------
+        x : torch.Tensor or numpy.ndarray
+            Input tensor containing position and SNP data
+            
+        Returns
+        -------
+        torch.Tensor
+            Embedded representation of the input data
+        """
+        if not isinstance(x, torch.Tensor):
+            x = torch.from_numpy(x).float()
+        with torch.no_grad():
+            return self.forward(x)
+
+class SPIDNABlock(nn.Module):
+    """
+    A block in the SPIDNA network that processes features and updates the output.
+    
+    Parameters
+    ----------
+    output_dim : int
+        Dimension of the output feature vector
+    num_feature : int
+        Number of features in the convolutional layers
+    """
+    def __init__(self, output_dim, num_feature):
+        super().__init__()
+        self.output_dim = output_dim
+        self.phi = nn.Conv2d(num_feature * 2, num_feature, (1, 3))
+        self.phi_bn = nn.BatchNorm2d(num_feature * 2)
+        self.maxpool = nn.MaxPool2d((1, 2))
+        self.fc = nn.Linear(output_dim, output_dim)
+
+    def forward(self, x, output):
+        x = self.phi(self.phi_bn(x))
+        psi1 = torch.mean(x, 2, keepdim=True)
+        psi = psi1
+        current_output = self.fc(torch.mean(psi[:, :self.output_dim, :, :], 3).squeeze(2))
+        output = output + current_output
+        psi = psi.expand(-1, -1, x.size(2), -1)
+        x = torch.cat((x, psi), 1)
+        x = F.relu(self.maxpool(x))
+        return x, output
+
