@@ -194,7 +194,7 @@ class VariablePopulationSize(BaseSimulator):
             torch.manual_seed(seed)
         
         min_snps = 400
-        max_attempts = 20
+        max_attempts = 100
         attempt = 0
         
         while attempt < max_attempts:

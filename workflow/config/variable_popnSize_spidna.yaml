@@ -16,9 +16,9 @@ gpu_resources:
 
 random_seed: 1
 chunk_size: 100 # number of instances to simulate per worker
-n_train: 200
-n_val: 100
-n_test: 100
+n_train: 10000
+n_val: 1000
+n_test: 1000
 
 train_embedding_net_separately: True # train embedding network separately from normalizing flow
 use_cache: True # load features into CPU memory
