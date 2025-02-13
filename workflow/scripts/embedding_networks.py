@@ -190,9 +190,9 @@ class SPIDNA_embedding_network(nn.Module):
         self.num_feature = num_feature
         # Initialize convolutional layers with padding
         self.conv_pos = nn.Conv2d(1, num_feature, (1, 3), padding=(0, 1))
-        self.conv_pos_bn = nn.BatchNorm2d(num_feature)
+        self.conv_pos_bn = nn.BatchNorm2d(num_feature, track_running_stats=False)
         self.conv_snp = nn.Conv2d(1, num_feature, (1, 3), padding=(0, 1))
-        self.conv_snp_bn = nn.BatchNorm2d(num_feature)
+        self.conv_snp_bn = nn.BatchNorm2d(num_feature, track_running_stats=False)
         # Create SPIDNA blocks
         self.blocks = nn.ModuleList([SPIDNABlock(num_feature, output_dim) for _ in range(num_block)])
 
@@ -236,7 +236,7 @@ class SPIDNABlock(nn.Module):
         super().__init__()
         # Add padding to maintain spatial dimensions
         self.phi = nn.Conv2d(num_feature * 2, num_feature, (1, 3), padding=(0, 1))
-        self.phi_bn = nn.BatchNorm2d(num_feature * 2)
+        self.phi_bn = nn.BatchNorm2d(num_feature * 2,track_running_stats=False)
         self.maxpool = nn.MaxPool2d((1, 2))
         self.fc = nn.Linear(num_feature, output_dim)
 
