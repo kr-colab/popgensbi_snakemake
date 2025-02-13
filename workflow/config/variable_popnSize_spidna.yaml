@@ -36,10 +36,6 @@ simulator:
   sequence_length: 1000000
   mutation_rate: 1.5e-8
   num_time_windows: 3
-  min_pop_size: 100
-  max_pop_size: 100000
-  min_recomb_rate: 1.0e-9
-  max_recomb_rate: 1.0e-7
   max_time: 100000
   time_rate: 0.1
   samples:

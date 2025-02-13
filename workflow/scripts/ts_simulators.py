@@ -152,12 +152,10 @@ class VariablePopulationSize(BaseSimulator):
         "samples": {"pop": 10},
         "sequence_length": 10e6,
         "mutation_rate": 1.5e-8,
-        # TIME WINDOWS AND SIZE RANGES
         "num_time_windows": 3,
-        "min_pop_size": 1e2,
-        "max_pop_size": 1e5,
-        "min_recomb_rate": 1e-9,
-        "max_recomb_rate": 1e-7,
+        # RANDOM PARAMETERS (UNIFORM)
+        "pop_sizes": [1e2, 1e5],      # Range for population sizes (log10 space)
+        "recomb_rate": [1e-9, 1e-7],  # Range for recombination rate
         # TIME PARAMETERS
         "max_time": 100000,  # Maximum time for population events
         "time_rate": 0.1,    # Rate at which time changes across windows
@@ -165,80 +163,59 @@ class VariablePopulationSize(BaseSimulator):
 
     def __init__(self, config: dict):
         super().__init__(config, self.default_config)
-        # Parameters will be population sizes for each time window plus recombination rate
+        # Set up parameters list
         self.parameters = [f"N_{i}" for i in range(self.num_time_windows)] + ["recomb_rate"]
         
-        # Set up the prior distributions
-        pop_size_lows = np.log10(self.min_pop_size) * torch.ones(self.num_time_windows)
-        pop_size_highs = np.log10(self.max_pop_size) * torch.ones(self.num_time_windows)
-        recomb_lows = self.min_recomb_rate * torch.ones(1)
-        recomb_highs = self.max_recomb_rate * torch.ones(1)
+        # Create parameter ranges in the same format as AraTha_2epoch
+        # Population sizes (in log10 space)
+        pop_size_ranges = [[np.log10(self.pop_sizes[0]), np.log10(self.pop_sizes[1])] 
+                          for _ in range(self.num_time_windows)]
+        # Add recombination rate range
+        param_ranges = pop_size_ranges + [self.recomb_rate]
         
-        # Combine into single prior
+        # Set up prior using BoxUniform
         self.prior = BoxUniform(
-            low=torch.cat([pop_size_lows, recomb_lows]),
-            high=torch.cat([pop_size_highs, recomb_highs])
+            low=torch.tensor([r[0] for r in param_ranges]),
+            high=torch.tensor([r[1] for r in param_ranges])
         )
         
         # Calculate fixed time points for population size changes
         self.change_times = self._calculate_change_times()
 
     def _calculate_change_times(self) -> np.ndarray:
-        """
-        Calculate the times at which population size changes occur using an exponential spacing.
-        
-        Returns
-        -------
-        np.ndarray
-            Array of time points for population size changes
-        """
+        """Calculate the times at which population size changes occur using an exponential spacing."""
         times = [(np.exp(np.log(1 + self.time_rate * self.max_time) * i / 
                         (self.num_time_windows - 1)) - 1) / self.time_rate 
                 for i in range(self.num_time_windows)]
         return np.around(times).astype(int)
-
-    def sample_parameters(self) -> np.ndarray:
-        """
-        Sample parameters from the prior distribution.
-        
-        Returns
-        -------
-        np.ndarray
-            Array containing population sizes and recombination rate
-        """
-        theta = self.prior.sample()
-        # Convert population sizes from log10 space
-        pop_sizes = 10 ** theta[:-1]
-        # Combine with recombination rate
-        return torch.cat([pop_sizes, theta[-1:]])
 
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
         if seed is not None:
             torch.manual_seed(seed)
         
         min_snps = 400
-        max_attempts = 20  # Prevent infinite loops
+        max_attempts = 20
         attempt = 0
         
         while attempt < max_attempts:
-            theta = self.sample_parameters()
+            # Sample parameters directly from prior (like AraTha_2epoch)
+            theta = self.prior.sample().numpy()
+            
+            # Convert population sizes from log10 space
+            pop_sizes = 10 ** theta[:-1]  # All but last element are population sizes
+            recomb_rate = theta[-1]  # Last element is recombination rate
             
             # Create demography
             demography = msprime.Demography()
-            # Convert tensors to numpy arrays for msprime
-            pop_sizes = theta[:-1].numpy()  # All but last element are population sizes
-            recomb_rate = float(theta[-1])  # Convert single value to Python float
-            
-            # Add initial population with name matching the samples config
             demography.add_population(name="pop0", initial_size=float(pop_sizes[0]))
             
             # Add population size changes at calculated time intervals
             for i in range(1, len(pop_sizes)):
                 demography.add_population_parameters_change(
-                    time=self.change_times[i], 
+                    time=self.change_times[i],
                     initial_size=float(pop_sizes[i]),
                     growth_rate=0,
-                    population="pop0"  # Specify which population to change
+                    population="pop0"
                 )
 
             # Simulate ancestry
@@ -263,16 +240,16 @@ class VariablePopulationSize(BaseSimulator):
             keep = np.logical_and.reduce([
                 row_sum != 0,
                 row_sum != num_sample,
-                row_sum > num_sample * 0.05,  # MAF threshold
+                row_sum > num_sample * 0.05,
                 num_sample - row_sum > num_sample * 0.05
             ])
             
             if np.sum(keep) >= min_snps:
-                return ts, theta.numpy()
+                return ts, theta
                 
             attempt += 1
             if seed is not None:
-                seed += 1  # Increment seed for next attempt
+                seed += 1
         
-        raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after MAF filtering and {max_attempts} attempts")
+        raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")
 
