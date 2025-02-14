@@ -91,6 +91,35 @@ embedding_network:
   class_name: "SummaryStatisticsEmbedding"
 '''
 
+# Variable Population Size Simulator configuration
+variable_popn_config = '''
+simulator:
+  class_name: "VariablePopulationSize"
+  sequence_length: 1000000
+  mutation_rate: 1.5e-8
+  num_time_windows: 3
+  max_time: 100000
+  time_rate: 0.1
+  samples:
+    pop: 10
+'''
+
+SPIDNA_config = '''
+packed_sequence: False
+
+processor:
+  class_name: "SPIDNA_processor"
+  n_snps: 2000
+  maf_thresh: 0.05
+  relative_position: True
+  
+embedding_network:
+  class_name: "SPIDNA_embedding_network"
+  output_dim: 64
+  num_block: 6
+  num_feature: 10
+'''
+
 # Training strategy configurations
 e2e_config = '''
 train_embedding_net_separately: False
@@ -290,3 +319,26 @@ def test_summary_stats_workflow(strategy_name, strategy_config, cache_name, cach
         )
     finally:
         cleanup_test_environment(test_name) 
+
+@pytest.mark.parametrize("strategy_name,strategy_config,cache_name,cache_config", test_params)
+def test_spidna_workflow(strategy_name, strategy_config, cache_name, cache_config):
+    """Test the SPIDNA workflow configuration."""
+    test_name = f"spidna-{strategy_name}-{cache_name}"
+    try:
+        test_workflow_dir = setup_test_environment(test_name)
+        _run_workflow_with_config(
+            base_config=config,
+            sim_config={
+                'class_name': 'VariablePopulationSize',
+                'config': variable_popn_config
+            },
+            arch_config={
+                'name': f'SPIDNA-{strategy_name}-{cache_name}',
+                'config': SPIDNA_config
+            },
+            strategy_config=strategy_config,
+            cache_config=cache_config,
+            test_workflow_dir=test_workflow_dir
+        )
+    finally:
+        cleanup_test_environment(test_name)

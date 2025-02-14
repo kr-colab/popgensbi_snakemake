@@ -169,3 +169,52 @@ class tskit_sfs(BaseProcessor):
         
         return sfs
 
+class SPIDNA_processor(BaseProcessor):
+    default_config = {
+        "maf": 0.05,
+        "relative_position": True
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+
+    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
+        # Extract genotype matrix and positions
+        snp = ts.genotype_matrix()  # Shape: (n_variants, n_samples)
+        pos = ts.sites_position
+        
+        # Handle relative positions
+        if self.relative_position:
+            abs_pos = np.array(pos)
+            pos = abs_pos - np.concatenate(([0], abs_pos[:-1]))
+        
+        # MAF filtering
+        if self.maf != 0:
+            num_sample = ts.num_samples
+            row_sum = np.sum(snp, axis=1)  # Sum along rows since matrix isn't transposed
+            keep = np.logical_and.reduce([
+                row_sum != 0,
+                row_sum != num_sample,
+                row_sum > num_sample * self.maf,
+                num_sample - row_sum > num_sample * self.maf
+            ])
+            
+            snp = snp[keep]
+            pos = pos[keep]
+        
+        # Take first n_samples samples and first 400 SNPs
+        n_samples = min(snp.shape[1], 20)  # Max 20 samples, using shape[1] since not transposed
+        snp = snp[:400, :n_samples]  # Take exactly 400 SNPs, maintain (variants, samples) shape
+        pos = pos[:400]  # Take exactly 400 positions
+        
+        # Create output tensor matching legacy format
+        # First create position channel (1, 400)
+        pos_channel = pos.reshape(1, -1)
+        
+        # Stack channels
+        output_val = np.concatenate([
+            pos_channel,  # Shape: (1, 400)
+            snp.T        # Now transpose only at the end to match expected output format
+        ])
+        
+        return output_val.astype(np.float32)

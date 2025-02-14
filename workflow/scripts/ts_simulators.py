@@ -1,6 +1,8 @@
 ## ts_simulators outputs tree sequence. This cannot be used as a simulator for simulate_for_sbi!
 
 import tskit
+import msprime
+import demes
 import torch
 import numpy as np
 import stdpopsim
@@ -52,9 +54,6 @@ class YRI_CEU(BaseSimulator):
         torch.manual_seed(seed)
         theta = self.prior.sample().numpy()
         N_A, N_YRI, N_CEU_initial, N_CEU_final, M, Tp, T = theta
-
-        import demes
-        import msprime
 
         graph = demes.Builder()
         graph.add_deme(
@@ -142,3 +141,115 @@ class AraTha_2epoch(BaseSimulator):
         )
 
         return ts, theta
+
+class VariablePopulationSize(BaseSimulator):
+    """
+    Simulate a model with varying population size across multiple time windows.
+    The model consists of a single population that undergoes multiple size changes.
+    """
+    default_config = {
+        # FIXED PARAMETERS
+        "samples": {"pop": 10},
+        "sequence_length": 10e6,
+        "mutation_rate": 1.5e-8,
+        "num_time_windows": 3,
+        # RANDOM PARAMETERS (UNIFORM)
+        "pop_sizes": [1e2, 1e5],      # Range for population sizes (log10 space)
+        "recomb_rate": [1e-9, 1e-7],  # Range for recombination rate
+        # TIME PARAMETERS
+        "max_time": 100000,  # Maximum time for population events
+        "time_rate": 0.1,    # Rate at which time changes across windows
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+        # Set up parameters list
+        self.parameters = [f"N_{i}" for i in range(self.num_time_windows)] + ["recomb_rate"]
+        
+        # Create parameter ranges in the same format as AraTha_2epoch
+        # Population sizes (in log10 space)
+        pop_size_ranges = [[np.log10(self.pop_sizes[0]), np.log10(self.pop_sizes[1])] 
+                          for _ in range(self.num_time_windows)]
+        # Add recombination rate range
+        param_ranges = pop_size_ranges + [self.recomb_rate]
+        
+        # Set up prior using BoxUniform
+        self.prior = BoxUniform(
+            low=torch.tensor([r[0] for r in param_ranges]),
+            high=torch.tensor([r[1] for r in param_ranges])
+        )
+        
+        # Calculate fixed time points for population size changes
+        self.change_times = self._calculate_change_times()
+
+    def _calculate_change_times(self) -> np.ndarray:
+        """Calculate the times at which population size changes occur using an exponential spacing."""
+        times = [(np.exp(np.log(1 + self.time_rate * self.max_time) * i / 
+                        (self.num_time_windows - 1)) - 1) / self.time_rate 
+                for i in range(self.num_time_windows)]
+        return np.around(times).astype(int)
+
+    def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
+        if seed is not None:
+            torch.manual_seed(seed)
+        
+        min_snps = 400
+        max_attempts = 100
+        attempt = 0
+        
+        while attempt < max_attempts:
+            # Sample parameters directly from prior (like AraTha_2epoch)
+            theta = self.prior.sample().numpy()
+            
+            # Convert population sizes from log10 space
+            pop_sizes = 10 ** theta[:-1]  # All but last element are population sizes
+            recomb_rate = theta[-1]  # Last element is recombination rate
+            
+            # Create demography
+            demography = msprime.Demography()
+            demography.add_population(name="pop0", initial_size=float(pop_sizes[0]))
+            
+            # Add population size changes at calculated time intervals
+            for i in range(1, len(pop_sizes)):
+                demography.add_population_parameters_change(
+                    time=self.change_times[i],
+                    initial_size=float(pop_sizes[i]),
+                    growth_rate=0,
+                    population="pop0"
+                )
+
+            # Simulate ancestry
+            ts = msprime.sim_ancestry(
+                samples={"pop0": self.samples["pop"]},
+                demography=demography,
+                sequence_length=self.sequence_length,
+                recombination_rate=recomb_rate,
+                random_seed=seed
+            )
+            
+            # Add mutations
+            ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
+            
+            # Check if we have enough SNPs after MAF filtering
+            geno = ts.genotype_matrix().T
+            num_sample = geno.shape[0]
+            if (geno==2).any():
+                num_sample *= 2
+            
+            row_sum = np.sum(geno, axis=0)
+            keep = np.logical_and.reduce([
+                row_sum != 0,
+                row_sum != num_sample,
+                row_sum > num_sample * 0.05,
+                num_sample - row_sum > num_sample * 0.05
+            ])
+            
+            if np.sum(keep) >= min_snps:
+                return ts, theta
+                
+            attempt += 1
+            if seed is not None:
+                seed += 1
+        
+        raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")
+
