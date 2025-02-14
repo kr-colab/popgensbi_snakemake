@@ -190,10 +190,7 @@ class SPIDNA_processor(BaseProcessor):
         
         # MAF filtering
         if self.maf != 0:
-            num_sample = snp.shape[1]  # Now using shape[1] since matrix isn't transposed
-            if (snp==2).any():
-                num_sample *= 2
-            
+            num_sample = ts.num_samples
             row_sum = np.sum(snp, axis=1)  # Sum along rows since matrix isn't transposed
             keep = np.logical_and.reduce([
                 row_sum != 0,
