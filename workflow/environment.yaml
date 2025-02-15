@@ -26,3 +26,4 @@ dependencies:
     - dadi
     - pytest
     - pytest-xdist
+    - scikit-allel

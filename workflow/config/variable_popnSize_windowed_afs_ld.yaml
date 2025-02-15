@@ -1,0 +1,53 @@
+# --- top level arguments are ALWAYS REQUIRED --- #
+
+# change this to the project directory you want to use
+project_dir: "/home/adkern/popgensbi_snakemake/variable_popnSize_spidna"
+
+cpu_resources:
+  runtime: "2h"
+  mem_mb: 16000
+
+gpu_resources: 
+  runtime: "4h"
+  mem_mb: 50000
+  gpus: 1
+  slurm_partition: "kerngpu,gpu"
+  slurm_extra: "--gres=gpu:1 --constraint=a100"
+
+random_seed: 1
+chunk_size: 5 # number of instances to simulate per worker
+n_train: 200
+n_val: 50
+n_test: 50
+
+train_embedding_net_separately: True # train embedding network separately from normalizing flow
+use_cache: True # load features into CPU memory
+optimizer: "Adam"
+batch_size: 32
+learning_rate: 0.0005
+max_num_epochs: 200
+stop_after_epochs: 20
+clip_max_norm: 5
+packed_sequence: False
+
+simulator:
+  class_name: "VariablePopulationSize"
+  # OPTIONAL CLASS KWARGS:
+  sequence_length: 10000000
+  mutation_rate: 1.5e-8
+  num_time_windows: 3
+  max_time: 100000
+  time_rate: 0.1
+  samples:
+    pop: 10
+
+processor:
+  class_name: "tskit_windowed_sfs_plus_ld"
+  # OPTIONAL CLASS KWARGS:
+  window_size: 1_000_000
+  span_normalise: False
+  polarised: True
+
+embedding_network:
+  class_name: "SummaryStatisticsEmbedding"
+

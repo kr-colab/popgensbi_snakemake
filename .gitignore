@@ -27,3 +27,4 @@ docs/_build/**
 sbi_dev/.pixi
 *.done
 *.trees
+*.ipynb
