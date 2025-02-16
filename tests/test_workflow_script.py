@@ -91,6 +91,19 @@ embedding_network:
   class_name: "SummaryStatisticsEmbedding"
 '''
 
+sum_stats_config_2 = '''
+packed_sequence: False
+
+processor:
+  class_name: "tskit_windowed_sfs_plus_ld"
+  window_size: 1000000
+  span_normalise: False
+  polarised: True
+  
+embedding_network:
+  class_name: "SummaryStatisticsEmbedding"
+'''
+
 # Variable Population Size Simulator configuration
 variable_popn_config = '''
 simulator:
@@ -342,3 +355,27 @@ def test_spidna_workflow(strategy_name, strategy_config, cache_name, cache_confi
         )
     finally:
         cleanup_test_environment(test_name)
+        
+        
+@pytest.mark.parametrize("strategy_name,strategy_config,cache_name,cache_config", test_params)
+def test_summary_stats2_workflow(strategy_name, strategy_config, cache_name, cache_config):
+    """Test the Summary Statistics workflow configuration."""
+    test_name = f"sumstats-{strategy_name}-{cache_name}"
+    try:
+        test_workflow_dir = setup_test_environment(test_name)
+        _run_workflow_with_config(
+            base_config=config,
+            sim_config={
+                'class_name': 'VariablePopulationSize',
+                'config': variable_popn_config
+            },
+            arch_config={
+                'name': f'SUMMARY_STATS-{strategy_name}-{cache_name}',
+                'config': sum_stats_config_2
+            },
+            strategy_config=strategy_config,
+            cache_config=cache_config,
+            test_workflow_dir=test_workflow_dir
+        )
+    finally:
+        cleanup_test_environment(test_name) 

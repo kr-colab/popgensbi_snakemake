@@ -38,3 +38,4 @@ sbi_dev/.pixi
 */*/sbi-logs/**
 *.pyc
 *.ckpt
+*.png
