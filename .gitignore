@@ -28,3 +28,13 @@ sbi_dev/.pixi
 *.done
 *.trees
 *.ipynb
+*/*/tensors/zarr/**
+*/*/logs/**
+*/*/sbi-logs/**
+*/*/sbi-logs/**
+*/*/sbi-logs/**
+*/*/sbi-logs/**
+*/*/sbi-logs/**
+*/*/sbi-logs/**
+*.pyc
+*.ckpt

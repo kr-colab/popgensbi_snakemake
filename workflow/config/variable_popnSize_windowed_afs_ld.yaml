@@ -14,11 +14,11 @@ gpu_resources:
   slurm_partition: "kerngpu,gpu"
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
-random_seed: 1
-chunk_size: 5 # number of instances to simulate per worker
-n_train: 200
-n_val: 50
-n_test: 50
+random_seed: 991
+chunk_size: 2 # number of instances to simulate per worker
+n_train: 1000
+n_val: 200
+n_test: 200
 
 train_embedding_net_separately: True # train embedding network separately from normalizing flow
 use_cache: True # load features into CPU memory

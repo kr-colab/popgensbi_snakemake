@@ -125,7 +125,7 @@ rule process_batch:
         zarr = rules.create_zarr.output.zarr,
         done = rules.simulate_batch.output.done,
     output:
-        done = os.path.join(TENSOR_DIR, "batch_{batch}.done"),
+        done = touch(os.path.join(TENSOR_DIR, "batch_{batch}.done")),
     threads: 1
     resources: **CPU_RESOURCES
     params:
@@ -237,3 +237,12 @@ rule plot_diagnostics:
         simulator_config = config["simulator"],
         random_seed = RANDOM_SEED,
     script: "scripts/plot_diagnostics.py"
+
+
+rule clean_processing:
+    """
+    Remove processing .done files to force reprocessing of tree sequences
+    (without rerunning simulations).
+    """
+    shell:
+        "rm -f {TENSOR_DIR}/batch_*.done"

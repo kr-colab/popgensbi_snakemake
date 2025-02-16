@@ -279,7 +279,7 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
             sd["gap_id"] = i
             ld = pd.concat([ld, sd])
 
-        ld2 = ld.dropna().groupby("dist_group", observed=True).agg(agg_bins)
+        ld2 = ld.dropna().groupby("dist_group", observed=False).agg(agg_bins)
 
         # Flatten the MultiIndex columns and rename explicitly
         ld2.columns = ['_'.join(col).strip() for col in ld2.columns.values]
@@ -316,15 +316,21 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
 
             # get the AFS for each window
             afs = ts_win.allele_frequency_spectrum(mode="site", polarised=self.polarised, span_normalise=self.span_normalise)
+            # normalize the AFS
+            # afs = afs / np.sum(afs)
             afs_stats.append(afs)
 
         # calculate the mean r2 for each window at each distance
-        mean_r2_values = pd.concat(ld_stats)['mean_r2'].groupby(level=0, observed=True).mean()
+        mean_r2_values = (
+            pd.concat(ld_stats)['mean_r2']
+            .groupby(level=0, observed=False)
+            .mean()  # Automatically skips NaNs by default
+            .fillna(0)  # Replace any remaining NaNs with 0
+        )
 
         # calculate the mean afs for each window
         mean_afs_values = np.stack(afs_stats).mean(axis=0)[1:-1]
         sum_stats = np.concatenate((mean_r2_values, mean_afs_values))
-        
         return sum_stats
 
 class SPIDNA_processor(BaseProcessor):
