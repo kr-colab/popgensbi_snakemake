@@ -1,0 +1,28 @@
+vcf_path: "empirical_prediction/test_data/test.vcf"
+output_dir: "empirical_prediction/"
+
+cpu_resources:
+  runtime: "2h"
+  mem_mb: 16000
+
+gpu_resources: 
+  runtime: "4h"
+  mem_mb: 50000
+  gpus: 1
+  slurm_partition: "kerngpu,gpu"
+  slurm_extra: "--gres=gpu:1 --constraint=a100"
+
+
+ts_inference:
+   window_size: 1000
+   window_type: "variant_index"
+   report: True
+   ancestral_states: "empirical_prediction/test_data/test-AA.npy"
+
+chunk_size: 100 # number of instances to process per worker
+random_seed: 42
+processor:
+  class_name: "cnn_extract"
+  # OPTIONAL CLASS KWARGS:
+  n_snps: 2000
+  maf_thresh: 0.05

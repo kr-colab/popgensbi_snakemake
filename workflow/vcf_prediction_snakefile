@@ -1,0 +1,117 @@
+import os
+import glob
+PROJECT_DIR = config["output_dir"]
+TENSOR_DIR = os.path.join(PROJECT_DIR, "tensors")
+TREE_DIR = os.path.join(PROJECT_DIR, "trees")
+ZARR_FIELDS = ["features"]
+SPLIT_NAMES = ["vcf_windows"]
+CHUNK_SIZE = config["chunk_size"]
+RANDOM_SEED = int(config["random_seed"])
+
+CPU_RESOURCES = config.get("cpu_resources", {})
+GPU_RESOURCES = config.get("gpu_resources", {})
+
+rule all:
+    input:
+        os.path.join(TENSOR_DIR, "all_batches.done")
+
+rule prepare_vcf:
+    input:
+        vcf = config["vcf_path"]
+    output:
+        vcf_gz = temp(os.path.join(PROJECT_DIR, "{vcf}.gz")),
+        vcf_gz_tbi = os.path.join(PROJECT_DIR, "{vcf}.gz.tbi"),
+        zarr = directory(os.path.join(PROJECT_DIR, "{vcf}.vcz"))
+    shell:
+        """
+        mkdir -p {PROJECT_DIR}
+        bgzip -c {input.vcf} > {output.vcf_gz}
+        tabix -p vcf {output.vcf_gz}
+        vcf2zarr explode -p 4 -f {output.vcf_gz} {PROJECT_DIR}/{wildcards.vcf}.icf
+        vcf2zarr encode -p 4 -f {PROJECT_DIR}/{wildcards.vcf}.icf {output.zarr}
+        #rm -f {PROJECT_DIR}/{wildcards.vcf}.icf
+        """
+
+rule create_zarr:
+    message: "Creating zarr dataset..."
+    output:
+        zarr = directory(os.path.join(TENSOR_DIR, "zarr"))
+    params:
+        split_sizes = [len(glob.glob(os.path.join(TREE_DIR, "*.trees")))],
+        split_names = SPLIT_NAMES,
+        chunk_size = CHUNK_SIZE,
+        random_seed = RANDOM_SEED,
+        fields = ZARR_FIELDS,
+    threads: 1
+    resources: **CPU_RESOURCES
+    script:
+        "scripts/create_zarr.py"
+
+checkpoint infer_windowed_trees:
+    input:
+        vcf = config["vcf_path"],
+        zarr = os.path.join(PROJECT_DIR, os.path.basename(config["vcf_path"]) + ".vcz")
+    output:
+        directory(TREE_DIR)   # TREE_DIR is now a concrete directory
+    params:
+        window_size = config["ts_inference"]["window_size"],
+        output_dir  = TREE_DIR,
+        window_type = config["ts_inference"]["window_type"],
+        report      = config["ts_inference"]["report"],
+        ancestral_states = config["ts_inference"]["ancestral_states"]
+    threads:
+        4
+    script:
+        "scripts/infer_window_ts.py"
+
+checkpoint get_windowed_trees:
+    input:
+        done = rules.infer_windowed_trees.output   # or however you model dependencies
+    output:
+        directory(TREE_DIR)
+    run:
+        tree_files = glob.glob(os.path.join(TREE_DIR, "*.trees"))
+        n_trees = len(tree_files)
+        # Compute number of chunks using ceiling division:
+        n_chunks = (n_trees + CHUNK_SIZE - 1) // CHUNK_SIZE
+        with open(os.path.join(TREE_DIR, "metadata.txt"), "w") as f:
+            f.write(f"{n_trees}\n{n_chunks}\n")
+
+
+def get_process_batch_files():
+    # Wait for the checkpoint output to become available.
+    tree_dir = checkpoints.get_windowed_trees.get().output[0]
+    tree_files = glob.glob(os.path.join(tree_dir, "*.trees"))
+    n_chunks = (len(tree_files) + CHUNK_SIZE - 1) // CHUNK_SIZE
+    return [os.path.join(TENSOR_DIR, f"batch_{i}.done") for i in range(n_chunks)]
+
+
+rule process_batch:
+    message:
+        "Processing batch {wildcards.batch} of tree sequences..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+        done = rules.infer_windowed_trees.output[0],
+    output:
+        done = touch(os.path.join(TENSOR_DIR, "batch_{batch}.done")),
+    threads: 1
+    resources: **CPU_RESOURCES
+    params:
+        batch_id = lambda wildcards: int(wildcards.batch),
+        batch_size = CHUNK_SIZE,
+        processor_config = config["processor"],
+    script: 
+        "scripts/process_ts_batch.py"
+
+
+
+rule collect_batches:
+    input:
+        # Note: we use a lambda function to defer evaluation until after the checkpoint runs.
+        lambda wc: expand(os.path.join(TENSOR_DIR, "batch_{i}.done"), i=range(get_process_batch_files().__len__()))
+        # Alternatively, you can use: lambda wc: get_process_batch_files()
+    output:
+        touch(os.path.join(TENSOR_DIR, "all_batches.done"))
+    shell:
+        "touch {output}"
+
