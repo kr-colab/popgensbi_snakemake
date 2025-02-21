@@ -1,0 +1,6 @@
+vcf_path: "empirical_prediction/test_data/test.vcf"
+window_size: 1000
+output_dir: "empirical_prediction/tree_sequences"
+window_type: "variant_index"
+report: True
+ancestral_states: "empirical_prediction/test_data/test-AA.npy"
