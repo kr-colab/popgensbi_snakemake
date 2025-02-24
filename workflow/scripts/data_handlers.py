@@ -20,7 +20,10 @@ class ZarrDataset(Dataset):
         self.indices = self.root[split][:]
         self.x_data = self.root.features
         self.x_shape = self.root.features_shape
-        self.theta = Tensor(np.stack(self.root.targets[self.indices]))
+        if "targets" in self.root:
+            self.theta = Tensor(np.stack(self.root.targets[self.indices]))
+        else:
+            self.theta = None
 
         # If x is ragged use a PackedSequence to collate into batches
         self.x_collate = torch.stack if not packed_sequence else \
@@ -44,7 +47,12 @@ class ZarrDataset(Dataset):
             # Load from zarr and return CPU tensors
             i = self.indices[idx]
             x = torch.from_numpy(self.x_data[i].reshape(*self.x_shape[i])).float()
-        return self.theta[idx], x
+        if self.theta is not None:
+            return self.theta[idx], x
+        else:
+            # return empty tensor for theta
+            return torch.empty(()), x
+
 
     def __len__(self) -> int:
         return len(self.indices)

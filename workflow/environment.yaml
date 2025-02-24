@@ -27,3 +27,5 @@ dependencies:
     - pytest
     - pytest-xdist
     - scikit-allel
+    - git+https://github.com/tsinfer/tsinfer.git@main
+    - ray
