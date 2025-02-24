@@ -50,7 +50,9 @@ class ZarrDataset(Dataset):
         if self.theta is not None:
             return self.theta[idx], x
         else:
-            return Tensor(np.full((x.shape), -666)), x
+            # return empty tensor for theta
+            return torch.empty(()), x
+
 
     def __len__(self) -> int:
         return len(self.indices)
