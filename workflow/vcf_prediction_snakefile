@@ -43,7 +43,7 @@ rule add_populations_metadata:
     output:
         done = touch(os.path.join(PROJECT_DIR, "populations_metadata.done"))
     params:
-        popn_csv_path = config["metadata"]["sample_popns"]
+        popn_csv_path = config["ts_inference"]["sample_popns"]
     script:
         "scripts/add_populations_metadata.py"
 

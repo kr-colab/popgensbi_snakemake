@@ -18,9 +18,8 @@ ts_inference:
    window_type: "variant_index"
    report: True
    ancestral_states: "empirical_prediction/test_data/test-AA.npy"
+   sample_popns: "empirical_prediction/test_data/test_sample_popns.csv"
 
-metadata:
-  sample_popns: "empirical_prediction/test_data/test_sample_popns.csv"
 
 chunk_size: 100 # number of instances to process per worker
 random_seed: 42
