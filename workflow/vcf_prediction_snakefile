@@ -149,4 +149,9 @@ rule clean:
         rm -rf {TENSOR_DIR}
         echo {PRED_DIR}
         rm -rf {PRED_DIR}
+        echo {PROJECT_DIR}
+        rm -rf {PROJECT_DIR}/{VCF_ID}.gz
+        rm -rf {PROJECT_DIR}/{VCF_ID}.gz.tbi
+        rm -rf {PROJECT_DIR}/{VCF_ID}.vcz
+        rm -rf {PROJECT_DIR}/populations_metadata.done
         """
