@@ -47,21 +47,6 @@ rule add_populations_metadata:
     script:
         "scripts/add_populations_metadata.py"
 
-rule create_zarr:
-    message: "Creating zarr dataset..."
-    output:
-        zarr = directory(os.path.join(TENSOR_DIR, "zarr"))
-    params:
-        split_sizes = [len(glob.glob(os.path.join(TREE_DIR, "*.trees")))],
-        split_names = SPLIT_NAMES,
-        chunk_size = CHUNK_SIZE,
-        random_seed = RANDOM_SEED,
-        fields = ZARR_FIELDS
-    threads: 1
-    resources: **CPU_RESOURCES
-    script:
-        "scripts/create_zarr.py"
-
 checkpoint infer_windowed_trees:
     input:
         vcf = config["vcf_path"],
@@ -79,6 +64,23 @@ checkpoint infer_windowed_trees:
     threads: 4
     script:
         "scripts/infer_window_ts.py"
+
+rule create_zarr:
+    message: "Creating zarr dataset..."
+    input:
+        trees_done = rules.infer_windowed_trees.output.done
+    output:
+        zarr = directory(os.path.join(TENSOR_DIR, "zarr"))
+    params:
+        split_sizes = lambda _, input: [len(glob.glob(os.path.join(TREE_DIR, "*.trees")))],
+        split_names = SPLIT_NAMES,
+        chunk_size = CHUNK_SIZE,
+        random_seed = RANDOM_SEED,
+        fields = ZARR_FIELDS
+    threads: 1
+    resources: **CPU_RESOURCES
+    script:
+        "scripts/create_zarr.py"
 
 def get_trees_dir(wildcards):
     """Get the directory containing tree sequence files"""
@@ -136,3 +138,15 @@ rule predict_windowed_trees:
         simulator_config = config["prediction"]["simulator"],
         random_seed = RANDOM_SEED,
     script: "scripts/predict_windows.py"
+
+rule clean:
+    shell:
+        """
+        echo 'Cleaning up...'
+        echo {TREE_DIR}
+        rm -rf {TREE_DIR}
+        echo {TENSOR_DIR}
+        rm -rf {TENSOR_DIR}
+        echo {PRED_DIR}
+        rm -rf {PRED_DIR}
+        """

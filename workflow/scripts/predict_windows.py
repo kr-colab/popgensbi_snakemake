@@ -93,7 +93,7 @@ trainer = Trainer(
 samples = trainer.predict(model=model, dataloaders=loader)
 # samples is a list of tensors, each with shape (batch_size, num_parameters, num_samples)
 # Save samples to zarr
-print(len(samples))
+
 with zarr.open(snakemake.input.zarr, mode="a") as zarr_store:
     if "predictions" in zarr_store:
         del zarr_store["predictions"]  # Remove existing dataset

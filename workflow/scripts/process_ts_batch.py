@@ -15,7 +15,7 @@ batch_start = batch_id * batch_size
 
 # Get input directory
 input_dir = os.path.dirname(snakemake.input.done)
-print(input_dir)
+
 # Open zarr store
 root = zarr.open(snakemake.input.zarr, "rw")
 # Initialize processor

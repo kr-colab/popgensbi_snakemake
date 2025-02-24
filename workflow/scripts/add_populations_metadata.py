@@ -21,7 +21,6 @@ zarr.save(snakemake.input.zarr + "/populations_metadata", metadata)
 num_individuals = ds["sample_id"].shape[0]
 individuals_population = np.full(num_individuals, tskit.NULL, dtype=np.int32)
 for pop, pop_size in populations.items():
-    print(pop, pop_size)
     for i in range(pop_size):
         individuals_population[i] = pop_names.index(pop)
 zarr.save(snakemake.input.zarr + "/individuals_population", individuals_population)
