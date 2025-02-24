@@ -3,7 +3,8 @@ import glob
 PROJECT_DIR = config["output_dir"]
 TENSOR_DIR = os.path.join(PROJECT_DIR, "tensors")
 TREE_DIR = os.path.join(PROJECT_DIR, "trees")
-ZARR_FIELDS = ["features"]
+PRED_DIR = os.path.join(PROJECT_DIR, "predictions")
+ZARR_FIELDS = ["features", "predictions"]
 SPLIT_NAMES = ["vcf_windows"]
 CHUNK_SIZE = config["chunk_size"]
 RANDOM_SEED = int(config["random_seed"])
@@ -11,26 +12,40 @@ RANDOM_SEED = int(config["random_seed"])
 CPU_RESOURCES = config.get("cpu_resources", {})
 GPU_RESOURCES = config.get("gpu_resources", {})
 
+# Get VCF ID from the input path
+VCF_ID = os.path.splitext(os.path.basename(config["vcf_path"]))[0]
+
 rule all:
     input:
-        os.path.join(TENSOR_DIR, "all_batches.done")
+        os.path.join(TENSOR_DIR, "all_batches.done"),
+        os.path.join(PRED_DIR, "all_predictions.done")
 
 rule prepare_vcf:
     input:
         vcf = config["vcf_path"]
     output:
-        vcf_gz = temp(os.path.join(PROJECT_DIR, "{vcf}.gz")),
-        vcf_gz_tbi = os.path.join(PROJECT_DIR, "{vcf}.gz.tbi"),
-        zarr = directory(os.path.join(PROJECT_DIR, "{vcf}.vcz"))
+        vcf_gz = temp(os.path.join(PROJECT_DIR, f"{VCF_ID}.gz")),
+        vcf_gz_tbi = temp(os.path.join(PROJECT_DIR, f"{VCF_ID}.gz.tbi")),
+        zarr = directory(os.path.join(PROJECT_DIR, f"{VCF_ID}.vcz"))
     shell:
         """
         mkdir -p {PROJECT_DIR}
         bgzip -c {input.vcf} > {output.vcf_gz}
         tabix -p vcf {output.vcf_gz}
-        vcf2zarr explode -p 4 -f {output.vcf_gz} {PROJECT_DIR}/{wildcards.vcf}.icf
-        vcf2zarr encode -p 4 -f {PROJECT_DIR}/{wildcards.vcf}.icf {output.zarr}
-        #rm -f {PROJECT_DIR}/{wildcards.vcf}.icf
+        vcf2zarr explode -p 4 -f {output.vcf_gz} {PROJECT_DIR}/{VCF_ID}.icf
+        vcf2zarr encode -p 4 -f {PROJECT_DIR}/{VCF_ID}.icf {output.zarr}
+        rm -rf {PROJECT_DIR}/{VCF_ID}.icf
         """
+
+rule add_populations_metadata:
+    input:
+        zarr = rules.prepare_vcf.output.zarr
+    output:
+        done = touch(os.path.join(PROJECT_DIR, "populations_metadata.done"))
+    params:
+        populations = config["metadata"]["populations"]
+    script:
+        "scripts/add_populations_metadata.py"
 
 rule create_zarr:
     message: "Creating zarr dataset..."
@@ -41,7 +56,7 @@ rule create_zarr:
         split_names = SPLIT_NAMES,
         chunk_size = CHUNK_SIZE,
         random_seed = RANDOM_SEED,
-        fields = ZARR_FIELDS,
+        fields = ZARR_FIELDS
     threads: 1
     resources: **CPU_RESOURCES
     script:
@@ -50,68 +65,74 @@ rule create_zarr:
 checkpoint infer_windowed_trees:
     input:
         vcf = config["vcf_path"],
-        zarr = os.path.join(PROJECT_DIR, os.path.basename(config["vcf_path"]) + ".vcz")
+        zarr = rules.prepare_vcf.output.zarr,
+        populations_metadata = rules.add_populations_metadata.output.done
     output:
-        directory(TREE_DIR)   # TREE_DIR is now a concrete directory
+        trees_dir = directory(TREE_DIR),
+        done = touch(os.path.join(TREE_DIR, "infer_windowed_trees.done"))
     params:
         window_size = config["ts_inference"]["window_size"],
-        output_dir  = TREE_DIR,
+        output_dir = TREE_DIR,
         window_type = config["ts_inference"]["window_type"],
-        report      = config["ts_inference"]["report"],
+        report = config["ts_inference"]["report"],
         ancestral_states = config["ts_inference"]["ancestral_states"]
-    threads:
-        4
+    threads: 4
     script:
         "scripts/infer_window_ts.py"
 
-checkpoint get_windowed_trees:
-    input:
-        done = rules.infer_windowed_trees.output   # or however you model dependencies
-    output:
-        directory(TREE_DIR)
-    run:
-        tree_files = glob.glob(os.path.join(TREE_DIR, "*.trees"))
-        n_trees = len(tree_files)
-        # Compute number of chunks using ceiling division:
-        n_chunks = (n_trees + CHUNK_SIZE - 1) // CHUNK_SIZE
-        with open(os.path.join(TREE_DIR, "metadata.txt"), "w") as f:
-            f.write(f"{n_trees}\n{n_chunks}\n")
+def get_trees_dir(wildcards):
+    """Get the directory containing tree sequence files"""
+    checkpoint_output = checkpoints.infer_windowed_trees.get()
+    return checkpoint_output.output.trees_dir
 
-
-def get_process_batch_files():
-    # Wait for the checkpoint output to become available.
-    tree_dir = checkpoints.get_windowed_trees.get().output[0]
-    tree_files = glob.glob(os.path.join(tree_dir, "*.trees"))
-    n_chunks = (len(tree_files) + CHUNK_SIZE - 1) // CHUNK_SIZE
-    return [os.path.join(TENSOR_DIR, f"batch_{i}.done") for i in range(n_chunks)]
-
+def get_num_batches():
+    """Calculate number of batches based on number of tree files"""
+    checkpoint_output = checkpoints.infer_windowed_trees.get()
+    tree_files = glob.glob(os.path.join(checkpoint_output.output.trees_dir, "*.trees"))
+    return (len(tree_files) + CHUNK_SIZE - 1) // CHUNK_SIZE
 
 rule process_batch:
     message:
         "Processing batch {wildcards.batch} of tree sequences..."
     input:
         zarr = rules.create_zarr.output.zarr,
-        done = rules.infer_windowed_trees.output[0],
+        done = os.path.join(TREE_DIR, "infer_windowed_trees.done")
     output:
-        done = touch(os.path.join(TENSOR_DIR, "batch_{batch}.done")),
-    threads: 1
-    resources: **CPU_RESOURCES
+        done = touch(os.path.join(TENSOR_DIR, "batch_{batch}.done"))
     params:
         batch_id = lambda wildcards: int(wildcards.batch),
         batch_size = CHUNK_SIZE,
-        processor_config = config["processor"],
+        processor_config = config["processor"]
+    threads: 1
+    resources: **CPU_RESOURCES
     script: 
         "scripts/process_ts_batch.py"
 
-
-
 rule collect_batches:
     input:
-        # Note: we use a lambda function to defer evaluation until after the checkpoint runs.
-        lambda wc: expand(os.path.join(TENSOR_DIR, "batch_{i}.done"), i=range(get_process_batch_files().__len__()))
-        # Alternatively, you can use: lambda wc: get_process_batch_files()
+        lambda wildcards: expand(
+            os.path.join(TENSOR_DIR, "batch_{i}.done"),
+            i=range(get_num_batches())
+        )
     output:
-        touch(os.path.join(TENSOR_DIR, "all_batches.done"))
-    shell:
-        "touch {output}"
+        done = touch(os.path.join(TENSOR_DIR, "all_batches.done"))
 
+rule predict_windowed_trees:
+    message:
+        "Predicting windowed trees..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+        embedding_net = config["prediction"]["embedding_net"],
+        normalizing_flow = config["prediction"]["normalizing_flow"],
+        collect_batches = rules.collect_batches.output.done
+    output:
+        done = touch(os.path.join(PRED_DIR, "all_predictions.done")),
+    threads: 4
+    resources: **GPU_RESOURCES
+    params:
+        batch_size = config["prediction"]["batch_size"],
+        use_cache = config["prediction"]["use_cache"],
+        packed_sequence = config["prediction"]["packed_sequence"],
+        simulator_config = config["prediction"]["simulator"],
+        random_seed = RANDOM_SEED,
+    script: "scripts/predict_windows.py"
