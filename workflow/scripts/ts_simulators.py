@@ -253,3 +253,44 @@ class VariablePopulationSize(BaseSimulator):
         
         raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")
 
+class recombination_rate(BaseSimulator):
+    """
+    Simulate a one population model where recombination rate varies
+    among replicates 
+    """
+
+    default_config = {
+        # FIXED PARAMETERS
+        "samples": {0: 10},
+        "sequence_length": 1e6,
+        "mutation_rate": 1.5e-8,
+        "pop_size": 1e4,
+        # RANDOM PARAMETERS (UNIFORM)
+        "recombination_rate": [5e-9, 5e-7],
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+        self.parameters = ["recombination_rate"]
+        self.prior = BoxUniform(
+            low=torch.tensor([getattr(self, p)[0] for p in self.parameters]), 
+            high=torch.tensor([getattr(self, p)[1] for p in self.parameters]), 
+        )
+
+
+    def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
+
+        torch.manual_seed(seed)
+        theta = self.prior.sample().numpy()
+        recombination_rate = theta
+
+        ts = msprime.sim_ancestry(
+            self.samples,
+            population_size=self.pop_size,
+            sequence_length=self.sequence_length,
+            recombination_rate=recombination_rate,
+            random_seed=seed,
+        )
+        ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
+
+        return ts, theta
