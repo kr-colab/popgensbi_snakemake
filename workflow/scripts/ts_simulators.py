@@ -89,6 +89,7 @@ class YRI_CEU(BaseSimulator):
 
         return ts, theta
 
+
 class AraTha_2epoch(BaseSimulator):
     """
     Simulate the African2Epoch_1H18 model from stdpopsim for Arabidopsis thaliana.
@@ -141,6 +142,7 @@ class AraTha_2epoch(BaseSimulator):
         )
 
         return ts, theta
+
 
 class VariablePopulationSize(BaseSimulator):
     """
@@ -253,6 +255,7 @@ class VariablePopulationSize(BaseSimulator):
         
         raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")
 
+
 class recombination_rate(BaseSimulator):
     """
     Simulate a one population model where recombination rate varies
@@ -267,11 +270,12 @@ class recombination_rate(BaseSimulator):
         "pop_size": 1e4,
         # RANDOM PARAMETERS (UNIFORM)
         "recombination_rate": [0, 1e-8],
+        "dummy": [0, 1e-8],
     }
 
     def __init__(self, config: dict):
         super().__init__(config, self.default_config)
-        self.parameters = ["recombination_rate"]
+        self.parameters = ["recombination_rate", "dummy"]
         self.prior = BoxUniform(
             low=torch.tensor([getattr(self, p)[0] for p in self.parameters]), 
             high=torch.tensor([getattr(self, p)[1] for p in self.parameters]), 
@@ -282,7 +286,7 @@ class recombination_rate(BaseSimulator):
 
         torch.manual_seed(seed)
         theta = self.prior.sample().numpy()
-        recombination_rate = theta
+        recombination_rate = theta[0]
 
         ts = msprime.sim_ancestry(
             self.samples,

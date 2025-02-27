@@ -32,14 +32,14 @@ for i in range(batch_size):
 
     # Try simulating until the tree sequence contains more than one mutation site.
     # We assume that a tree sequence with > 1 site implies sufficient mutations.
+    seed = root.seed[idx]
     for attempt in range(n_trys):
-        seed = root.seed[idx]
         ts, theta = simulator(seed=seed)
         if ts.num_sites > 1:
             break
-    else:
         seed += 1
-        warnings.warn(f"Zero mutations returned for simulation {idx} after {n_trys} trys")
+    else:
+        raise ValueError(f"Zero mutations returned for simulation {idx} after {n_trys} trys")
     
     # Save tree sequence
     ts_path = os.path.join(output_dir, f"{idx}.trees")

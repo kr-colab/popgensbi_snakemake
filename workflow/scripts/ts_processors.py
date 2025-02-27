@@ -12,6 +12,7 @@ class BaseProcessor:
         for key, default in default.items():
             setattr(self, key, config.get(key, default))
 
+
 class genotypes_and_distances(BaseProcessor):
 
     default_config = {
@@ -383,6 +384,7 @@ class SPIDNA_processor(BaseProcessor):
         
         return output_val.astype(np.float32)
     
+
 class ReLERNN_processor(BaseProcessor):
 
     default_config = {
@@ -403,9 +405,9 @@ class ReLERNN_processor(BaseProcessor):
             freq <= self.max_freq,
         )
         assert self.phased, "ReLERNN processor requires phased genotypes"
+        geno = geno * 2 - 1  # recode ancestral to -1, derived to 1
         pos = ts.sites_position / ts.sequence_length
         geno = np.concatenate([pos.reshape(ts.num_sites, -1), geno], axis=-1)
-        geno = (geno * 2) - 1
         # filter SNPs
         geno = geno[keep]
         geno = geno[:self.n_snps]

@@ -267,6 +267,7 @@ class SPIDNABlock(nn.Module):
         
         return x, output
 
+
 class ReLERNN(nn.Module):
     """
     This module constructs a bi-directional GRU based RNN following the architecture
