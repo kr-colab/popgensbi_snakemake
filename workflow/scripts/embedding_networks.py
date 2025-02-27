@@ -267,3 +267,65 @@ class SPIDNABlock(nn.Module):
         
         return x, output
 
+class ReLERNN(nn.Module):
+    """
+    This module constructs a bi-directional GRU based RNN following the architecture
+    from https://github.com/kr-colab/ReLERNN/blob/master/ReLERNN/networks.py#L7.
+
+    It processes haplotype data along with corresponding positional information to produce
+    a feature embedding. Its output is consistent with the other embedding networks in this module.
+
+    Parameters
+    ----------
+    input_size : int
+        The input size for the GRU layer (typically num_individuals * ploidy).
+    num_positions : int
+        The number of genome positions in the input data.
+    output_dim : int, optional
+        The dimension of the final embedded feature vector (default: 64).
+
+    Input
+    -----
+    x : torch.Tensor, shape (batch, sequence_length, 1 + input_size)
+        The first feature along the last dimension is assumed to be positional data while
+        the remaining features are the haplotype representation.
+
+    Output
+    ------
+    torch.Tensor, shape (batch, output_dim)
+        The embedded feature vector.
+    """
+    def __init__(self, input_size, n_snps, output_size=64):
+        super().__init__()
+        self.rnn = nn.GRU(input_size, 84, num_layers=1, batch_first=True, bidirectional=True)
+        self.fc1 = nn.Sequential(
+            nn.Linear(168, 256),
+            nn.Dropout(0.35)
+        )
+        self.fc_pos = nn.Sequential(
+            nn.Linear(n_snps, 256)
+        )
+        self.feature_ext = nn.Sequential(
+            nn.Linear(512, 64),
+            nn.Dropout(0.35),
+            nn.Linear(64, output_size)
+        )
+
+    def forward(self, x):
+        # x is expected to be of shape (batch, sequence_length, 1 + input_size)
+        # where the first feature is positional data and the rest is haplotype data.
+        pos = x[..., 0]   # (batch, sequence_length) == (batch, num_positions)
+        haps = x[..., 1:]  # (batch, sequence_length, input_size)
+        
+        # Process haplotype data via GRU
+        _, hn = self.rnn(haps)  # hn: (num_layers * num_directions, batch, 84)
+        hn = hn.permute(1, 0, 2).reshape(x.shape[0], -1)  # (batch, 168)
+        
+        hapout = self.fc1(hn)  # (batch, 256)
+        posout = self.fc_pos(pos)  # (batch, 256)
+        
+        # Concatenate processed haplotype and position features
+        catout = torch.cat([hapout, posout], dim=-1)  # (batch, 512)
+        
+        # Final embedding extraction
+        return self.feature_ext(catout)  # (batch, output_size)

@@ -382,3 +382,36 @@ class SPIDNA_processor(BaseProcessor):
         ])
         
         return output_val.astype(np.float32)
+    
+class ReLERNN_processor(BaseProcessor):
+
+    default_config = {
+        "n_snps": 2000,
+        "phased": False,
+        "min_freq": 0.0,
+        "max_freq": 1.0,
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+
+    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
+        geno = ts.genotype_matrix()
+        freq = geno.sum(axis=1) / geno.shape[1] 
+        keep = np.logical_and(
+            freq >= self.min_freq,
+            freq <= self.max_freq,
+        )
+        assert self.phased, "ReLERNN processor requires phased genotypes"
+        pos = ts.sites_position / ts.sequence_length
+        geno = np.concatenate([pos.reshape(ts.num_sites, -1), geno], axis=-1)
+        geno = (geno * 2) - 1
+        # filter SNPs
+        geno = geno[keep]
+        geno = geno[:self.n_snps]
+        # Pad with zeros if the number of rows is less than max_snps
+        if geno.shape[0] < self.n_snps:
+            pad_rows = self.n_snps - geno.shape[0]
+            geno = np.pad(geno, ((0, pad_rows), (0, 0)), mode='constant', constant_values=0)
+
+        return geno

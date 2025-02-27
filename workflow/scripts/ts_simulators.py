@@ -266,7 +266,7 @@ class recombination_rate(BaseSimulator):
         "mutation_rate": 1.5e-8,
         "pop_size": 1e4,
         # RANDOM PARAMETERS (UNIFORM)
-        "recombination_rate": [5e-9, 5e-7],
+        "recombination_rate": [0, 1e-8],
     }
 
     def __init__(self, config: dict):
@@ -290,6 +290,7 @@ class recombination_rate(BaseSimulator):
             sequence_length=self.sequence_length,
             recombination_rate=recombination_rate,
             random_seed=seed,
+            discrete_genome=False, # don't want overlapping mutations
         )
         ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
 

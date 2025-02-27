@@ -1,6 +1,7 @@
 import os
 import zarr
 import numpy as np
+import warnings
 
 import ts_simulators
 
@@ -19,6 +20,9 @@ output_dir = os.path.dirname(snakemake.output.done)
 model = config["class_name"]
 simulator = getattr(ts_simulators, model)(config)
 
+# Set number of simulation attempts if tree sequence returns insufficient mutations.
+n_trys = 100
+
 # Simulate and save tree sequences in batch
 root = zarr.open(snakemake.input.zarr, "rw")
 for i in range(batch_size):
@@ -26,8 +30,16 @@ for i in range(batch_size):
     if idx >= root.seed.size:
         continue  # Skip if we've reached the end of the simulations
 
-    # Simulate tree sequence
-    ts, theta = simulator(seed=root.seed[idx])
+    # Try simulating until the tree sequence contains more than one mutation site.
+    # We assume that a tree sequence with > 1 site implies sufficient mutations.
+    for attempt in range(n_trys):
+        seed = root.seed[idx]
+        ts, theta = simulator(seed=seed)
+        if ts.num_sites > 1:
+            break
+    else:
+        seed += 1
+        warnings.warn(f"Zero mutations returned for simulation {idx} after {n_trys} trys")
     
     # Save tree sequence
     ts_path = os.path.join(output_dir, f"{idx}.trees")
