@@ -295,8 +295,16 @@ class ReLERNN(nn.Module):
     torch.Tensor, shape (batch, output_dim)
         The embedded feature vector.
     """
-    def __init__(self, input_size, n_snps, output_size=64):
+    def __init__(self, input_size, n_snps, output_size=64, shuffle_genotypes=False):
+        """
+        :param input_size: the input size of the GRU layer, e.g. num_individuals*ploidy
+            or num_individuals depending if the data is phased or not
+        :param n_snps: the number of SNPs in the input data
+        :param output_size: the dimension of the final embedded feature vector
+        :param shuffle_genotypes: whether to shuffle the genotypes (default: False; training only)
+        """
         super().__init__()
+        self.shuffle_genotypes = shuffle_genotypes
         self.rnn = nn.GRU(input_size, 84, num_layers=1, batch_first=True, bidirectional=True)
         self.fc1 = nn.Sequential(
             nn.Linear(168, 256),
@@ -317,6 +325,10 @@ class ReLERNN(nn.Module):
         pos = x[..., 0]   # (batch, sequence_length) == (batch, num_positions)
         haps = x[..., 1:]  # (batch, sequence_length, input_size)
         
+        # If shuffle_genotypes is True, shuffle the haplotype data
+        if self.shuffle_genotypes and self.training:
+            perm = torch.randperm(haps.shape[-1])
+            haps = haps[..., perm]        
         # Process haplotype data via GRU
         _, hn = self.rnn(haps)  # hn: (num_layers * num_directions, batch, 84)
         hn = hn.permute(1, 0, 2).reshape(x.shape[0], -1)  # (batch, 168)

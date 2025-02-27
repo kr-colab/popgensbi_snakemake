@@ -16,7 +16,7 @@ gpu_resources:
 
 random_seed: 1
 chunk_size: 10 # number of instances to simulate per worker
-n_train: 5000
+n_train: 1000
 n_val: 200
 n_test: 200
 
@@ -33,9 +33,9 @@ packed_sequence: False
 simulator:
   class_name: "recombination_rate"
   # OPTIONAL CLASS KWARGS:
-  sequence_length: 100000
-  mutation_rate: 1.5e-7
-  pop_size: 2e4
+  sequence_length: 500000
+  mutation_rate: 1.5e-8
+  pop_size: 4e4
   samples:
     0: 20
 
@@ -52,4 +52,4 @@ embedding_network:
   input_size: 40 # num haplotypes
   n_snps: 2000
   output_size: 64
-
+  shuffle_genotypes: True

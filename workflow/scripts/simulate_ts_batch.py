@@ -21,7 +21,7 @@ model = config["class_name"]
 simulator = getattr(ts_simulators, model)(config)
 
 # Set number of simulation attempts if tree sequence returns insufficient mutations.
-n_trys = 100
+n_trys = 200
 
 # Simulate and save tree sequences in batch
 root = zarr.open(snakemake.input.zarr, "rw")
