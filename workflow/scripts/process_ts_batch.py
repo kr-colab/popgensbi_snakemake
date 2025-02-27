@@ -22,22 +22,20 @@ root = zarr.open(snakemake.input.zarr, "rw")
 class_name = config["class_name"]
 ts_processor = getattr(ts_processors, class_name)(config)
 
-# List and sort all tree sequence files in the input directory.
-tree_files = sorted(glob.glob(os.path.join(input_dir, "*.trees")))
-
 # Process all tree sequences in batch
 for i in range(batch_size):
     idx = batch_start + i
     
-    if idx >= len(tree_files):
+    ts_path = os.path.join(input_dir, f"{idx}.trees")
+    if not os.path.exists(ts_path):
         continue  # No more tree sequences
-    ts_path = tree_files[idx]
     
     with open(ts_path, "rb") as ts_file:
         ts = tskit.load(ts_file)
     
     # Process features
     features = ts_processor(ts)
+
     # Write to zarr store
     root.features[idx] = features.flatten()
     root.features_shape[idx] = features.shape
