@@ -7,18 +7,15 @@ import seaborn as sns
 import pandas as pd
 from tqdm import tqdm
 from multiprocessing import Pool
-
 import ts_simulators
-from data_handlers import ZarrDataset
 
 
     
-# Get information from prior
+# Get information from config
 simulator_config = snakemake.params.simulator_config
 simulator = getattr(ts_simulators, simulator_config["class_name"])(simulator_config)
-parameters = simulator.parameters # TODO: where to enforce this field always existing?
-prior_mean = simulator.prior.mean.numpy()
-prior_stdd = simulator.prior.stddev.numpy()
+parameters = simulator.parameters 
+
 
 # open zarr file; extract targets
 z = zarr.open(snakemake.input.zarr)
@@ -44,10 +41,7 @@ with Pool(processes=num_workers) as pool:
                         total=len(df),
                         desc="Processing trees"))
 
-# Convert the results (a list of lists) back to a numpy array
-stats = np.array(results)
-    
-# convert stats to dataframe
+stats = np.array(results)    
 df["segregating_sites"], df["diversity"], df["Tajimas_D"] = stats.T
 
 # plot histograms of stats
@@ -59,11 +53,10 @@ plt.savefig(snakemake.output.stats_hist)
 plt.clf()
 
 
-# Use Seaborn's PairGrid to plot "segregating_sites" against each parameter
+# PairGrid of stats against each parameter
 g = sns.PairGrid(df, x_vars=parameters, y_vars=["segregating_sites", "diversity", "Tajimas_D"], height=4, aspect=1.2)
 g.map(plt.scatter)
 
-# Save the resulting pairplot
 plt.savefig(snakemake.output.stats_vs_params_pairplot)
 plt.clf()
 
