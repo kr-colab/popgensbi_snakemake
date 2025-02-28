@@ -151,8 +151,6 @@ trainer.fit(model=model, datamodule=datamodule)
 best_model = Model.load_from_checkpoint(f"{snakemake.output.network}.ckpt")
 torch.save(best_model.embedding_net.cpu(), snakemake.output.network)
 
-assert False, "DEBUG"
-
 ## Sanity check: estimator vs truth
 #import matplotlib.pyplot as plt
 #

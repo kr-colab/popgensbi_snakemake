@@ -18,6 +18,7 @@ input_dir = os.path.dirname(snakemake.input.done)
 
 # Open zarr store
 root = zarr.open(snakemake.input.zarr, "rw")
+
 # Initialize processor
 class_name = config["class_name"]
 ts_processor = getattr(ts_processors, class_name)(config)

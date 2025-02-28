@@ -20,13 +20,13 @@ n_train: 2000
 n_val: 1000
 n_test: 1000
 
-train_embedding_net_separately: True # train embedding network separately from normalizing flow
+train_embedding_net_separately: False # train embedding network separately from normalizing flow
 use_cache: True # load features into CPU memory
 optimizer: "Adam"
 batch_size: 64
-learning_rate: 0.001
-max_num_epochs: 100
-stop_after_epochs: 100
+learning_rate: 0.0001
+max_num_epochs: 1000
+stop_after_epochs: 1000
 clip_max_norm: 5
 packed_sequence: False
 

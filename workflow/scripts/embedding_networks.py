@@ -144,6 +144,7 @@ class ExchangeableCNN_IN(nn.Module):
         # input data through the network
         return self.feature_extractor(self.globalpool(self.symmetric(self.cnn(x))))
     
+
 class SummaryStatisticsEmbedding(nn.Module):
     """
     Embed summary statistics of a tree sequence.
@@ -153,6 +154,7 @@ class SummaryStatisticsEmbedding(nn.Module):
     For single population SFS: input shape is (num_samples + 1,)
     For joint SFS: input shape is (num_samples_pop1 + 1, num_samples_pop2 + 1)
     """
+
     def __init__(self, output_dim=None):
         super().__init__()
         self.identity = nn.Identity()
@@ -170,6 +172,7 @@ class SummaryStatisticsEmbedding(nn.Module):
         """
         with torch.no_grad():
             return self.forward(x)
+
 
 class SPIDNA_embedding_network(nn.Module):
     """
@@ -232,6 +235,10 @@ class SPIDNA_embedding_network(nn.Module):
 
 
 class SPIDNABlock(nn.Module):
+    """
+    SPIDNA architecture for processing genetic data, basic unit
+    """
+    
     def __init__(self, num_feature, output_dim):
         super().__init__()
         # Add padding to maintain spatial dimensions
@@ -296,6 +303,7 @@ class ReLERNN(nn.Module):
     torch.Tensor, shape (batch, output_dim)
         The embedded feature vector.
     """
+
     def __init__(self, input_size, n_snps, output_size=64, shuffle_genotypes=False):
         """
         :param input_size: the input size of the GRU layer, e.g. num_individuals*ploidy

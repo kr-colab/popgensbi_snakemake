@@ -48,7 +48,6 @@ class YRI_CEU(BaseSimulator):
             high=torch.tensor([getattr(self, p)[1] for p in self.parameters]), 
         )
 
-
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
 
         torch.manual_seed(seed)
@@ -95,9 +94,9 @@ class AraTha_2epoch(BaseSimulator):
     Simulate the African2Epoch_1H18 model from stdpopsim for Arabidopsis thaliana.
     The model consists of a single population that undergoes a size change.
     """
+
     species = stdpopsim.get_species("AraTha")
     model = species.get_demographic_model("African2Epoch_1H18")
-
     default_config = {
         # FIXED PARAMETERS
         "samples": {"SouthMiddleAtlas": 10},
@@ -149,6 +148,7 @@ class VariablePopulationSize(BaseSimulator):
     Simulate a model with varying population size across multiple time windows.
     The model consists of a single population that undergoes multiple size changes.
     """
+
     default_config = {
         # FIXED PARAMETERS
         "samples": {"pop": 10},
@@ -270,12 +270,11 @@ class recombination_rate(BaseSimulator):
         "pop_size": 1e4,
         # RANDOM PARAMETERS (UNIFORM)
         "recombination_rate": [0, 1e-8],
-        "dummy": [0, 1e-8],
     }
 
     def __init__(self, config: dict):
         super().__init__(config, self.default_config)
-        self.parameters = ["recombination_rate", "dummy"]
+        self.parameters = ["recombination_rate"]
         self.prior = BoxUniform(
             low=torch.tensor([getattr(self, p)[0] for p in self.parameters]), 
             high=torch.tensor([getattr(self, p)[1] for p in self.parameters]), 
@@ -286,7 +285,7 @@ class recombination_rate(BaseSimulator):
 
         torch.manual_seed(seed)
         theta = self.prior.sample().numpy()
-        recombination_rate = theta[0]
+        recombination_rate = theta.item()
 
         ts = msprime.sim_ancestry(
             self.samples,

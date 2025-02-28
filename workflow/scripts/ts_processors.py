@@ -14,6 +14,9 @@ class BaseProcessor:
 
 
 class genotypes_and_distances(BaseProcessor):
+    """
+    Genotype matrix and distance to next SNP
+    """
 
     default_config = {
         "max_snps": 2000,
@@ -48,6 +51,7 @@ class genotypes_and_distances(BaseProcessor):
         # exceeding `max_snps`
         return geno
 
+
 # TODO: something seems to be going wrong here if pops have different sizes
 # Not convinced the padding is working as intended
 class cnn_extract(BaseProcessor):
@@ -55,6 +59,7 @@ class cnn_extract(BaseProcessor):
     Extract genotype matrices from tree sequences using dinf's feature extractor.
     Handles both single and multiple population cases automatically.
     """
+
     default_config = {
         "n_snps": 500,
         "ploidy": 2,
@@ -126,12 +131,14 @@ class cnn_extract(BaseProcessor):
             # - Padded with -1 if # individuals differ
             return output_mat.numpy()
         
+
 class tskit_sfs(BaseProcessor):
-    '''
+    """
     Site frequency spectrum processor that handles both single and multiple populations.
     For single population: returns normalized SFS
     For multiple populations: returns normalized joint SFS
-    '''
+    """
+
     default_config = {
         "sample_sets": None,
         "windows": None,
@@ -171,13 +178,15 @@ class tskit_sfs(BaseProcessor):
         
         return sfs
 
+
 class tskit_windowed_sfs_plus_ld(BaseProcessor):
-    '''
+    """
     Summary statistics processor that returns a vector of the mean r2 across distances and the mean afs
     where the mean is taken over windows.
     
     Mean currently only for the single population case.
-    '''
+    """
+
     default_config = {
         "sample_sets": None,
         "mode": "site",
@@ -333,6 +342,7 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
         mean_afs_values = np.stack(afs_stats).mean(axis=0)[1:-1]
         sum_stats = np.concatenate((mean_r2_values, mean_afs_values))
         return sum_stats
+
 
 class SPIDNA_processor(BaseProcessor):
     default_config = {
