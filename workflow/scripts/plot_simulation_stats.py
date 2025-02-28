@@ -60,22 +60,40 @@ g.map(plt.scatter)
 plt.savefig(snakemake.output.stats_vs_params_pairplot)
 plt.clf()
 
-# Create heatmaps for each pair of parameters
-plt.figure(figsize=(12, 10))
+# Create heatmaps for each pair of parameters and each statistic
+n_params = len(parameters)
+# Adjust figure size based on number of parameters
+fig_width = n_params * 12  # Scale width by number of parameters
+fig_height = n_params * 3  # Scale height by number of parameters
+fig = plt.figure(figsize=(fig_width, fig_height))
+
+stats = ["segregating_sites", "diversity", "Tajimas_D"]
+titles = ["Segregating Sites", "Diversity", "Tajima's D"]
+
 for i, param_x in enumerate(parameters):
     for j, param_y in enumerate(parameters):
         if i < j:  # Only plot the upper triangle
-            plt.subplot(len(parameters), len(parameters), i * len(parameters) + j + 1)
-            sns.histplot(
-                data=df,
-                x=param_x,
-                y=param_y,
-                cmap="YlGnBu",
-                cbar=True,
-                weights="segregating_sites",
-                bins=30
-            )
-            plt.title(f"{param_x} vs {param_y}")
+            for stat_idx, (stat, title) in enumerate(zip(stats, titles)):
+                row = i
+                col = j + stat_idx * n_params
+                plt.subplot(n_params, n_params * 3, row * (n_params * 3) + col + 1)
+                
+                sns.histplot(
+                    data=df,
+                    x=param_x,
+                    y=param_y,
+                    cmap="plasma",
+                    cbar=True,
+                    weights=stat,
+                    bins=30
+                )
+                plt.title(f"{param_x} vs {param_y}")
+
+# Add super-titles for each set of heatmaps with dynamic positioning
+for idx, title in enumerate(titles):
+    # Calculate position based on the number of parameters
+    x_pos = (1 + 2 * idx) / (2 * 3)  # Divides the width into thirds
+    plt.figtext(x_pos, 0.1, title, ha='center', va='center', fontsize=26, fontweight='bold')
 
 plt.tight_layout()
 plt.savefig(snakemake.output.stats_heatmaps)
