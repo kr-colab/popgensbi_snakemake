@@ -1,6 +1,7 @@
 import os
 import zarr
 import numpy as np
+import warnings
 
 import ts_simulators
 
@@ -20,14 +21,24 @@ model = config["class_name"]
 simulator = getattr(ts_simulators, model)(config)
 
 # Simulate and save tree sequences in batch
+max_attempts = 1000
 root = zarr.open(snakemake.input.zarr, "rw")
 for i in range(batch_size):
     idx = batch_start + i
     if idx >= root.seed.size:
         continue  # Skip if we've reached the end of the simulations
 
-    # Simulate tree sequence
-    ts, theta = simulator(seed=root.seed[idx])
+    # Try simulating until the tree sequence contains more than one site.
+    seed = root.seed[idx]
+    for _ in range(max_attempts):
+        ts, theta = simulator(seed=seed)
+        if ts.num_sites > 1:
+            break
+        seed += 1
+    else:
+        raise ValueError(
+            f"Zero mutations returned for simulation {idx} after {max_attempts} attempts"
+        )
     
     # Save tree sequence
     ts_path = os.path.join(output_dir, f"{idx}.trees")

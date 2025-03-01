@@ -12,7 +12,11 @@ class BaseProcessor:
         for key, default in default.items():
             setattr(self, key, config.get(key, default))
 
+
 class genotypes_and_distances(BaseProcessor):
+    """
+    Genotype matrix and distance to next SNP
+    """
 
     default_config = {
         "max_snps": 2000,
@@ -47,6 +51,7 @@ class genotypes_and_distances(BaseProcessor):
         # exceeding `max_snps`
         return geno
 
+
 # TODO: something seems to be going wrong here if pops have different sizes
 # Not convinced the padding is working as intended
 class cnn_extract(BaseProcessor):
@@ -54,6 +59,7 @@ class cnn_extract(BaseProcessor):
     Extract genotype matrices from tree sequences using dinf's feature extractor.
     Handles both single and multiple population cases automatically.
     """
+
     default_config = {
         "n_snps": 500,
         "ploidy": 2,
@@ -125,12 +131,14 @@ class cnn_extract(BaseProcessor):
             # - Padded with -1 if # individuals differ
             return output_mat.numpy()
         
+
 class tskit_sfs(BaseProcessor):
-    '''
+    """
     Site frequency spectrum processor that handles both single and multiple populations.
     For single population: returns normalized SFS
     For multiple populations: returns normalized joint SFS
-    '''
+    """
+
     default_config = {
         "sample_sets": None,
         "windows": None,
@@ -170,13 +178,15 @@ class tskit_sfs(BaseProcessor):
         
         return sfs
 
+
 class tskit_windowed_sfs_plus_ld(BaseProcessor):
-    '''
+    """
     Summary statistics processor that returns a vector of the mean r2 across distances and the mean afs
     where the mean is taken over windows.
     
     Mean currently only for the single population case.
-    '''
+    """
+
     default_config = {
         "sample_sets": None,
         "mode": "site",
@@ -333,6 +343,7 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
         sum_stats = np.concatenate((mean_r2_values, mean_afs_values))
         return sum_stats
 
+
 class SPIDNA_processor(BaseProcessor):
     default_config = {
         "maf": 0.05,
@@ -382,3 +393,37 @@ class SPIDNA_processor(BaseProcessor):
         ])
         
         return output_val.astype(np.float32)
+    
+
+class ReLERNN_processor(BaseProcessor):
+
+    default_config = {
+        "n_snps": 2000,
+        "phased": False,
+        "min_freq": 0.0,
+        "max_freq": 1.0,
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+
+    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
+        geno = ts.genotype_matrix()
+        freq = geno.sum(axis=1) / geno.shape[1] 
+        keep = np.logical_and(
+            freq >= self.min_freq,
+            freq <= self.max_freq,
+        )
+        assert self.phased, "ReLERNN processor requires phased genotypes"
+        geno = geno * 2 - 1  # recode ancestral to -1, derived to 1
+        pos = ts.sites_position / ts.sequence_length
+        geno = np.concatenate([pos.reshape(ts.num_sites, -1), geno], axis=-1)
+        # filter SNPs
+        geno = geno[keep]
+        geno = geno[:self.n_snps]
+        # Pad with zeros if the number of rows is less than max_snps
+        if geno.shape[0] < self.n_snps:
+            pad_rows = self.n_snps - geno.shape[0]
+            geno = np.pad(geno, ((0, pad_rows), (0, 0)), mode='constant', constant_values=0)
+
+        return geno

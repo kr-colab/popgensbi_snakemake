@@ -48,7 +48,6 @@ class YRI_CEU(BaseSimulator):
             high=torch.tensor([getattr(self, p)[1] for p in self.parameters]), 
         )
 
-
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
 
         torch.manual_seed(seed)
@@ -89,14 +88,15 @@ class YRI_CEU(BaseSimulator):
 
         return ts, theta
 
+
 class AraTha_2epoch(BaseSimulator):
     """
     Simulate the African2Epoch_1H18 model from stdpopsim for Arabidopsis thaliana.
     The model consists of a single population that undergoes a size change.
     """
+
     species = stdpopsim.get_species("AraTha")
     model = species.get_demographic_model("African2Epoch_1H18")
-
     default_config = {
         # FIXED PARAMETERS
         "samples": {"SouthMiddleAtlas": 10},
@@ -142,11 +142,13 @@ class AraTha_2epoch(BaseSimulator):
 
         return ts, theta
 
+
 class VariablePopulationSize(BaseSimulator):
     """
     Simulate a model with varying population size across multiple time windows.
     The model consists of a single population that undergoes multiple size changes.
     """
+
     default_config = {
         # FIXED PARAMETERS
         "samples": {"pop": 10},
@@ -253,3 +255,46 @@ class VariablePopulationSize(BaseSimulator):
         
         raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")
 
+
+class recombination_rate(BaseSimulator):
+    """
+    Simulate a one population model where recombination rate varies
+    among replicates 
+    """
+
+    default_config = {
+        # FIXED PARAMETERS
+        "samples": {0: 10},
+        "sequence_length": 1e6,
+        "mutation_rate": 1.5e-8,
+        "pop_size": 1e4,
+        # RANDOM PARAMETERS (UNIFORM)
+        "recombination_rate": [0, 1e-8],
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+        self.parameters = ["recombination_rate"]
+        self.prior = BoxUniform(
+            low=torch.tensor([getattr(self, p)[0] for p in self.parameters]), 
+            high=torch.tensor([getattr(self, p)[1] for p in self.parameters]), 
+        )
+
+
+    def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
+
+        torch.manual_seed(seed)
+        theta = self.prior.sample().numpy()
+        recombination_rate = theta.item()
+
+        ts = msprime.sim_ancestry(
+            self.samples,
+            population_size=self.pop_size,
+            sequence_length=self.sequence_length,
+            recombination_rate=recombination_rate,
+            random_seed=seed,
+            discrete_genome=False, # don't want overlapping mutations
+        )
+        ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
+
+        return ts, theta
