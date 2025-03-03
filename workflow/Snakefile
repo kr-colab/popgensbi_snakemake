@@ -51,7 +51,8 @@ localrules:
     process_all,
     train_all,
     analyze_all,
-
+    plot_simulation_stats,
+    clean_processing,
 
 rule analyze_all:
     input:
@@ -246,3 +247,18 @@ rule clean_processing:
     """
     shell:
         "rm -f {TENSOR_DIR}/batch_*.done"
+
+rule plot_simulation_stats:
+    message:
+        "Plotting simulation stats..."
+    input:
+        zarr = rules.create_zarr.output.zarr,
+    output:
+        stats_hist = os.path.join(PLOT_DIR, "simulation_stats.png"),
+        stats_vs_params_pairplot = os.path.join(PLOT_DIR, "stats_vs_params_pairplot.png"),
+        stats_heatmaps = os.path.join(PLOT_DIR, "stats_heatmaps.png"),
+    params:
+        simulator_config = config["simulator"],
+        tree_dir = TREE_DIR,
+    threads: 10
+    script: "scripts/plot_simulation_stats.py"
