@@ -349,9 +349,10 @@ class Cattle_21Gen(BaseSimulator):
     
     def _generate_dependent_pop_sizes(self) -> np.ndarray:
         """
-        Generate a sequence of population sizes (in the original scale) where
-        each log10(population size) is sampled from a normal distribution centered
-        at the previous value, with a standard deviation sigma.
+        Generate a sequence of population sizes (in the log scale) where
+        the fist log10(population size) is sampled from a uniform distribution
+        corresponding to the most recent time window. The following population
+        sizes are generated following N_i = N_{i-1} * 10 ^ β for i in [1,21].
         """
         # Sample the first value uniformly within the log10 bounds
         log_values = self.prior.sample().numpy()
