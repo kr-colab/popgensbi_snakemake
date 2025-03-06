@@ -174,10 +174,18 @@ def contour_at_point(z, path, levels=[0.25, 0.5, 0.75]):
     samples_at_instance = posterior_draws[closest]
     true_values_at_instance = true_values[closest]
     dim = len(parameters)
-    fig, axs = plt.subplots(dim, dim, figsize=(dim * 2, dim * 2))
+
+    # Create subplots
+    if dim == 1:
+        fig, axs = plt.subplots(1, 1, figsize=(2, 2))  # Single Axes for 1D case
+        axs = np.array([[axs]])  # Wrap in a 2D array for consistency
+    else:
+        fig, axs = plt.subplots(dim, dim, figsize=(dim * 2, dim * 2))
+
     # TODO: what if prior is not uniform
     lower = simulator.prior.base_dist.low.numpy()
     upper = simulator.prior.base_dist.high.numpy()
+    
     for i in range(dim):
         for j in range(dim):
             if i == j:
@@ -212,6 +220,7 @@ def contour_at_point(z, path, levels=[0.25, 0.5, 0.75]):
                 axs[i, j].set_ylabel("")
             else:
                 axs[i, j].set_axis_off()
+    
     plt.savefig(path)
     plt.clf()
 
