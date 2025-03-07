@@ -15,6 +15,7 @@ import ts_simulators
 from data_handlers import ZarrDataset
 from utils import get_least_busy_gpu
 rng = np.random.default_rng(snakemake.params.random_seed)
+torch.manual_seed(snakemake.params.random_seed)
 
 # Determine the device
 if torch.cuda.is_available():

@@ -24,6 +24,7 @@ else:
     device = "cpu"
     devices = 1  # Ensure CPU compatibility
 
+
 # Lightning wrapper around data loaders
 class DataModule(LightningDataModule):
     def __init__(self):
