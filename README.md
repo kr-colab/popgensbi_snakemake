@@ -10,7 +10,7 @@ A Snakemake workflow for simulation-based inference in population genetics.
 
 ## Contents
 
-The main workflow for this package is contained in `workflow/Snakefile`. 
+The main workflow for this package is contained in `workflow/training_workflow.smk`. 
 This will run a complete neural posterior estimation workflow based on a given config file. For more details, see the [docs](https://popgensbi-snakemake.readthedocs.io/en/latest/).
 
 ## Environment setup
@@ -18,7 +18,7 @@ This will run a complete neural posterior estimation workflow based on a given c
 Current environment is set up with conda. To install the environment, run
 
 ```bash
-conda env create -f workflow/environment.yaml
+conda env create -f environment.yaml
 ```
 
 ## Basic usage
