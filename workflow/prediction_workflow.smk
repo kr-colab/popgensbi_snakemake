@@ -54,7 +54,7 @@ rule process_all:
         done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-process.done")), 
 
 
-rule simulate_all:
+rule infer_all:
     input:
         done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-infer.done")), 
 
@@ -136,7 +136,7 @@ rule predict_windows:
         embedding_net = EMBEDDING_NET,
         normalizing_flow = NORMALIZING_FLOW,
     output:
-        done = rules.predict_all.input,
+        done = touch(os.path.join(VCF_DIR, "done")),
     threads: 4
     resources: **GPU_RESOURCES
     params:

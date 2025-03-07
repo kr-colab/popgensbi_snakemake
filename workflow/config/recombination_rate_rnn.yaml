@@ -56,9 +56,9 @@ embedding_network:
 
 prediction:
   n_chunk: 10
-  vcf: "foo/snp.vcf.gz"
-  ancestral_fasta: "foo/anc.fa.gz"
-  population_map: "foo/popmap.yaml" # subset of samples, with populations
+  vcf: "example_data/recombination_rate/snp.vcf.gz"
+  ancestral_fasta: "example_data/recombination_rate/anc.fa.gz"
+  population_map: "example_data/recombination_rate/popmap.yaml" # subset of samples, with populations
   #window_size: "foo/windows.bed"
   window_size: 500000
   min_snps_per_window: 100
