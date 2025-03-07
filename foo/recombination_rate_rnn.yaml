@@ -15,8 +15,8 @@ gpu_resources:
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
 random_seed: 1
-n_chunk: 50 # number of jobs for parallel simulation
-n_train: 5000
+chunk_size: 10 # number of instances to simulate per worker
+n_train: 2000
 n_val: 1000
 n_test: 1000
 
@@ -25,8 +25,8 @@ use_cache: True # load features into CPU memory
 optimizer: "Adam"
 batch_size: 64
 learning_rate: 0.0001
-max_num_epochs: 300
-stop_after_epochs: 50
+max_num_epochs: 1000
+stop_after_epochs: 1000
 clip_max_norm: 5
 packed_sequence: False
 
@@ -54,11 +54,10 @@ embedding_network:
   output_size: 64
   shuffle_genotypes: True
 
-prediction:
-  n_chunk: 10
+vcf_prediction:
   vcf: "foo/snp.vcf.gz"
   ancestral_fasta: "foo/anc.fa.gz"
-  population_map: "foo/popmap.yaml" # subset of samples, with populations
-  #window_size: "foo/windows.bed"
+  population_map: "foo/popmap.yaml"
   window_size: 500000
-  min_snps_per_window: 100
+  window_by_variants: False
+  min_snps: 1000

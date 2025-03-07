@@ -15,6 +15,8 @@ import ts_simulators
 from data_handlers import ZarrDataset
 from utils import get_least_busy_gpu
 rng = np.random.default_rng(snakemake.params.random_seed)
+torch.manual_seed(snakemake.params.random_seed)
+
 
 # Determine the device
 if torch.cuda.is_available():
@@ -26,11 +28,11 @@ else:
     devices = 1  # Ensure CPU compatibility
     
     
-num_samples = 1000
 # Get simulator config
 simulator_config = snakemake.params.simulator_config
 simulator = getattr(ts_simulators, simulator_config["class_name"])(simulator_config)
 
+num_samples = 1000
 
 class Model(LightningModule):
     def __init__(self):
@@ -65,6 +67,7 @@ class Model(LightningModule):
         ).permute(1, 2, 0) # dimensions are (batch, parameter, npe sample)
         return samples
 
+
 # Sample posteriors on GPU
 dataset = ZarrDataset(
     snakemake.input.zarr, 
@@ -91,10 +94,5 @@ trainer = Trainer(
     logger=False,
 )
 samples = trainer.predict(model=model, dataloaders=loader)
-# samples is a list of tensors, each with shape (batch_size, num_parameters, num_samples)
-# Save samples to zarr
-
-with zarr.open(snakemake.input.zarr, mode="a") as zarr_store:
-    if "predictions" in zarr_store:
-        del zarr_store["predictions"]  # Remove existing dataset
-    zarr_store["predictions"] = samples
+samples = torch.cat(samples).cpu().numpy() # (batch_size, num_parameters, num_samples)
+zarr.save(f"{snakemake.input.zarr}/predictions", samples)

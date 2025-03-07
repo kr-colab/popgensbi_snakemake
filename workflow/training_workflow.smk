@@ -1,5 +1,5 @@
 """
-Train normalising flow on simulations
+Train embedding network and normalising flow on simulations
 """
 
 import os
@@ -8,20 +8,27 @@ import numpy as np
 CPU_RESOURCES = config.get("cpu_resources", {})
 GPU_RESOURCES = config.get("gpu_resources", {})
 
+module common:
+    snakefile: "common.smk"
+    config: config
+
+# very annoyingly: imported rules are first in the rule order and will get
+# executed by default, yet we have to do the following to access variables, 
+# so we should never actually define any rules in `common`
+use rule * from common
+
+PROJECT_DIR = common.PROJECT_DIR
+EMBEDDING_NET = common.EMBEDDING_NET
+NORMALIZING_FLOW = common.NORMALIZING_FLOW
+RANDOM_SEED = common.RANDOM_SEED
+TRAIN_SEPARATELY = common.TRAIN_SEPARATELY
+
 # Simulation design
 N_TRAIN = int(config["n_train"])
 N_VAL = int(config["n_val"])
 N_TEST = int(config["n_test"])
-RANDOM_SEED = int(config["random_seed"])
-TRAIN_SEPARATELY = bool(config["train_embedding_net_separately"])
 
 # Directory structure
-SIMULATOR = config["simulator"]["class_name"]
-PROCESSOR = config["processor"]["class_name"]
-EMBEDDING = config["embedding_network"]["class_name"]
-UID = f"{SIMULATOR}-{PROCESSOR}-{EMBEDDING}-{RANDOM_SEED}-{N_TRAIN}"
-UID += "-sep" if TRAIN_SEPARATELY else "-e2e"
-PROJECT_DIR = os.path.join(config["project_dir"], UID)
 PLOT_DIR = os.path.join(PROJECT_DIR, "plots")
 LOG_DIR = os.path.join(PROJECT_DIR, "logs")
 TREE_DIR = os.path.join(PROJECT_DIR, "trees")
@@ -35,13 +42,6 @@ if TRAIN_SEPARATELY:
     SPLIT_SIZES += [N_TRAIN, N_VAL]
     SPLIT_NAMES += ["pre_train", "pre_val"]
 N_CHUNK = int(config["n_chunk"])
-
-# Conditional naming of pickled networks
-EMBEDDING_NET_NAME = "embedding_network"
-NORMALIZING_FLOW_NAME = "normalizing_flow"
-if TRAIN_SEPARATELY:
-    EMBEDDING_NET_NAME = "pretrain_" + EMBEDDING_NET_NAME
-    NORMALIZING_FLOW_NAME = "pretrain_" + NORMALIZING_FLOW_NAME
 
 
 scattergather:
@@ -70,8 +70,8 @@ rule analyze_all:
 
 rule train_all:
     input:
-        embedding_net = os.path.join(PROJECT_DIR, EMBEDDING_NET_NAME),
-        normalizing_flow = os.path.join(PROJECT_DIR, NORMALIZING_FLOW_NAME),
+        embedding_net = EMBEDDING_NET,
+        normalizing_flow = NORMALIZING_FLOW,
 
 
 rule process_all:

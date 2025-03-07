@@ -1,157 +1,175 @@
+"""
+Predict posteriors across a windowed VCF, using trained normalizing flow
+and embedding network
+"""
+
 import os
 import glob
-PROJECT_DIR = config["output_dir"]
-TENSOR_DIR = os.path.join(PROJECT_DIR, "tensors")
-TREE_DIR = os.path.join(PROJECT_DIR, "trees")
-PRED_DIR = os.path.join(PROJECT_DIR, "predictions")
-ZARR_FIELDS = ["features", "predictions"]
-SPLIT_NAMES = ["vcf_windows"]
-CHUNK_SIZE = config["chunk_size"]
-RANDOM_SEED = int(config["random_seed"])
+import numpy as np
 
 CPU_RESOURCES = config.get("cpu_resources", {})
 GPU_RESOURCES = config.get("gpu_resources", {})
 
-# Get VCF ID from the input path
-VCF_ID = os.path.splitext(os.path.basename(config["vcf_path"]))[0]
+module common:
+    snakefile: "common.smk"
+    config: config
 
-rule all:
-    input:
-        os.path.join(TENSOR_DIR, "all_batches.done"),
-        os.path.join(PRED_DIR, "all_predictions.done")
+# very annoyingly: imported rules are first in the rule order and will get
+# executed by default, yet we have to do the following to access variables, 
+# so we should never actually define any rules in `common`
+use rule * from common
 
-rule prepare_vcf:
+PROJECT_DIR = common.PROJECT_DIR
+EMBEDDING_NET = common.EMBEDDING_NET
+NORMALIZING_FLOW = common.NORMALIZING_FLOW
+RANDOM_SEED = common.RANDOM_SEED
+
+# Directory structure
+VCF_PATH = config["prediction"].get("vcf")
+VCF_PREFIX = os.path.basename(VCF_PATH)
+VCF_DIR = os.path.join(PROJECT_DIR, VCF_PREFIX)
+TENSOR_DIR = os.path.join(VCF_DIR, "tensors")
+TREE_DIR = os.path.join(VCF_DIR, "trees")
+PLOT_DIR = os.path.join(VCF_DIR, "plots")
+
+# Divvy up windows into chunks
+N_CHUNK = config["prediction"].get("n_chunk")
+
+
+localrules: 
+    clean_all,
+
+
+scattergather:
+    split = N_CHUNK,
+
+
+rule predict_all:
     input:
-        vcf = config["vcf_path"]
+        done = os.path.join(VCF_DIR, "done"), # TODO: make figure
+
+
+rule process_all:
+    input:
+        done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-process.done")), 
+
+
+rule simulate_all:
+    input:
+        done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-infer.done")), 
+
+
+rule convert_vcf:
+    message: 
+        "Converting {input.vcf} to zarr..."
+    input:
+        vcf = VCF_PATH,
     output:
-        vcf_gz = temp(os.path.join(PROJECT_DIR, f"{VCF_ID}.gz")),
-        vcf_gz_tbi = temp(os.path.join(PROJECT_DIR, f"{VCF_ID}.gz.tbi")),
-        zarr = directory(os.path.join(PROJECT_DIR, f"{VCF_ID}.vcz"))
+        icf = temp(directory(os.path.join(VCF_DIR, "icf"))),
+        vcz = directory(os.path.join(VCF_DIR, "vcz")),
+    threads: 4
+    resources: **CPU_RESOURCES
     shell:
         """
-        mkdir -p {PROJECT_DIR}
-        bgzip -c {input.vcf} > {output.vcf_gz}
-        tabix -p vcf {output.vcf_gz}
-        vcf2zarr explode -p 4 -f {output.vcf_gz} {PROJECT_DIR}/{VCF_ID}.icf
-        vcf2zarr encode -p 4 -f {PROJECT_DIR}/{VCF_ID}.icf {output.zarr}
-        rm -rf {PROJECT_DIR}/{VCF_ID}.icf
+        vcf2zarr explode -Q -p {threads} -f {input.vcf} {output.icf}
+        vcf2zarr encode -Q -p {threads} -f {output.icf} {output.vcz}
         """
 
-rule add_populations_metadata:
-    input:
-        zarr = rules.prepare_vcf.output.zarr
-    output:
-        done = touch(os.path.join(PROJECT_DIR, "populations_metadata.done"))
-    params:
-        popn_csv_path = config["ts_inference"]["sample_popns"]
-    script:
-        "scripts/add_populations_metadata.py"
 
-checkpoint infer_windowed_trees:
+rule setup_prediction:
+    message: 
+        "Setting up prediction pipeline and creating zarr storage..."
     input:
-        vcf = config["vcf_path"],
-        zarr = rules.prepare_vcf.output.zarr,
-        populations_metadata = rules.add_populations_metadata.output.done
+        vcz = rules.convert_vcf.output.vcz,
     output:
-        trees_dir = directory(TREE_DIR),
-        done = touch(os.path.join(TREE_DIR, "infer_windowed_trees.done"))
-    params:
-        window_size = config["ts_inference"]["window_size"],
-        output_dir = TREE_DIR,
-        window_type = config["ts_inference"]["window_type"],
-        report = config["ts_inference"]["report"],
-        ancestral_states = config["ts_inference"]["ancestral_states"]
+        yaml = scatter.split(os.path.join(TREE_DIR, "{scatteritem}.yaml")),
+        zarr = directory(os.path.join(TENSOR_DIR, "zarr")),
     threads: 4
-    script:
-        "scripts/infer_window_ts.py"
-
-rule create_zarr:
-    message: "Creating zarr dataset..."
-    input:
-        trees_done = rules.infer_windowed_trees.output.done
-    output:
-        zarr = directory(os.path.join(TENSOR_DIR, "zarr"))
+    resources: **CPU_RESOURCES
     params:
-        split_sizes = lambda _, input: [len(glob.glob(os.path.join(TREE_DIR, "*.trees")))],
-        split_names = SPLIT_NAMES,
-        chunk_size = CHUNK_SIZE,
-        random_seed = RANDOM_SEED,
-        fields = ZARR_FIELDS
+        simulator_config = config["simulator"],
+        prediction_config = config["prediction"],
+    script:
+        "scripts/setup_prediction.py"
+
+
+rule infer_batch:
+    message:
+        "Inferring batch {wildcards.scatteritem} of tree sequences..."
+    input:
+        vcz = rules.convert_vcf.output.vcz,
+        zarr = rules.setup_prediction.output.zarr,
+        yaml = os.path.join(TREE_DIR, "{scatteritem}.yaml")
+    output:
+        done = touch(os.path.join(TREE_DIR, "{scatteritem}-infer.done"))
     threads: 1
     resources: **CPU_RESOURCES
+    params:
+        output_dir = TREE_DIR,
     script:
-        "scripts/create_zarr.py"
+        "scripts/infer_batch.py"
 
-def get_trees_dir(wildcards):
-    """Get the directory containing tree sequence files"""
-    checkpoint_output = checkpoints.infer_windowed_trees.get()
-    return checkpoint_output.output.trees_dir
-
-def get_num_batches():
-    """Calculate number of batches based on number of tree files"""
-    checkpoint_output = checkpoints.infer_windowed_trees.get()
-    tree_files = glob.glob(os.path.join(checkpoint_output.output.trees_dir, "*.trees"))
-    return (len(tree_files) + CHUNK_SIZE - 1) // CHUNK_SIZE
 
 rule process_batch:
     message:
-        "Processing batch {wildcards.batch} of tree sequences..."
+        "Processing batch {wildcards.scatteritem} of tree sequences..."
     input:
-        zarr = rules.create_zarr.output.zarr,
-        done = os.path.join(TREE_DIR, "infer_windowed_trees.done")
+        zarr = rules.setup_prediction.output.zarr,
+        yaml = os.path.join(TREE_DIR, "{scatteritem}.yaml"),
+        done = rules.infer_batch.output.done,
     output:
-        done = touch(os.path.join(TENSOR_DIR, "batch_{batch}.done"))
-    params:
-        batch_id = lambda wildcards: int(wildcards.batch),
-        batch_size = CHUNK_SIZE,
-        processor_config = config["processor"]
+        done = touch(os.path.join(TREE_DIR, "{scatteritem}-process.done")),
     threads: 1
     resources: **CPU_RESOURCES
+    params:
+        processor_config = config["processor"],
     script: 
-        "scripts/process_ts_batch.py"
+        "scripts/process_batch.py"
 
-rule collect_batches:
-    input:
-        lambda wildcards: expand(
-            os.path.join(TENSOR_DIR, "batch_{i}.done"),
-            i=range(get_num_batches())
-        )
-    output:
-        done = touch(os.path.join(TENSOR_DIR, "all_batches.done"))
 
-rule predict_windowed_trees:
+rule predict_windows:
     message:
-        "Predicting windowed trees..."
+        "Predicting targets across windows..."
     input:
-        zarr = rules.create_zarr.output.zarr,
-        embedding_net = config["prediction"]["embedding_net"],
-        normalizing_flow = config["prediction"]["normalizing_flow"],
-        collect_batches = rules.collect_batches.output.done
+        done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-process.done")),
+        zarr = rules.setup_prediction.output.zarr,
+        embedding_net = EMBEDDING_NET,
+        normalizing_flow = NORMALIZING_FLOW,
     output:
-        done = touch(os.path.join(PRED_DIR, "all_predictions.done")),
+        done = rules.predict_all.input,
     threads: 4
     resources: **GPU_RESOURCES
     params:
-        batch_size = config["prediction"]["batch_size"],
-        use_cache = config["prediction"]["use_cache"],
-        packed_sequence = config["prediction"]["packed_sequence"],
-        simulator_config = config["prediction"]["simulator"],
+        batch_size = config["batch_size"],
+        use_cache = config["use_cache"],
+        packed_sequence = config["packed_sequence"],
+        simulator_config = config["simulator"],
         random_seed = RANDOM_SEED,
-    script: "scripts/predict_windows.py"
+    script: 
+        "scripts/predict_windows.py"
 
-rule clean:
-    shell:
-        """
-        echo 'Cleaning up...'
-        echo {TREE_DIR}
-        rm -rf {TREE_DIR}
-        echo {TENSOR_DIR}
-        rm -rf {TENSOR_DIR}
-        echo {PRED_DIR}
-        rm -rf {PRED_DIR}
-        echo {PROJECT_DIR}
-        rm -rf {PROJECT_DIR}/{VCF_ID}.gz
-        rm -rf {PROJECT_DIR}/{VCF_ID}.gz.tbi
-        rm -rf {PROJECT_DIR}/{VCF_ID}.vcz
-        rm -rf {PROJECT_DIR}/populations_metadata.done
-        """
+
+rule clean_setup:
+    params:
+        setup = rules.setup_prediction.output,
+    shell: "rm -rf {params.setup}"
+
+
+rule clean_inferred:
+    params:
+        inferred = rules.infer_all.input,
+        tree_dir = TREE_DIR,
+    shell: "rm -rf {params.simulation} {params.tree_dir}/*.trees"
+
+
+rule clean_processing:
+    params:
+        processing = rules.process_all.input,
+    shell: "rm -rf {params.processing}"
+
+
+rule clean_all:
+    params:
+        vcf_dir = VCF_DIR,
+    shell: "rm -rf {params.vcf_dir}"
+

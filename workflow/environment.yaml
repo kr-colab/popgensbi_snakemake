@@ -23,9 +23,11 @@ dependencies:
     - lightning
     - msprime
     - stdpopsim
-    - dadi
     - pytest
     - pytest-xdist
     - scikit-allel
     - git+https://github.com/tsinfer/tsinfer.git@main
     - ray
+    - bio2zarr
+    - pysam
+    - pyyaml
