@@ -46,7 +46,7 @@ scattergather:
 
 rule predict_all:
     input:
-        done = os.path.join(VCF_DIR, "done"), # TODO: make figure
+        predictions = os.path.join(PLOT_DIR, "posteriors-across-windows.png"),
 
 
 rule process_all:
@@ -136,7 +136,7 @@ rule predict_windows:
         embedding_net = EMBEDDING_NET,
         normalizing_flow = NORMALIZING_FLOW,
     output:
-        done = touch(os.path.join(VCF_DIR, "done")),
+        predictions = rules.predict_all.input.predictions,
     threads: 4
     resources: **GPU_RESOURCES
     params:

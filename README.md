@@ -41,6 +41,7 @@ Example data for the VCF prediction pipeline may be created via
 ```bash
 python resources/util/simulate-vcf.py \
   --outpath "example_data/AraTha_2epoch" \
+  --window-size 1000000 \
   --configfile workflow/config/AraTha_2epoch_cnn.yaml
 ```
 

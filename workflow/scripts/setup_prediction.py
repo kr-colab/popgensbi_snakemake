@@ -72,35 +72,35 @@ zarr.save(f"{snakemake.input.vcz}/ancestral_state", ancestral_state)
 
 # split each contig in the vcz into windows
 variant_window = np.full(n_variants, -1)
-window_size = prediction_config["window_size"]
-assert isinstance(window_size, (float, int))
+windows = prediction_config["windows"]
 min_snps_per_window = prediction_config["min_snps_per_window"]
+assert os.path.exists(windows), f"Bed file {windows} not found"
+bed_chrom = np.loadtxt(windows, usecols=[0], dtype=object)
+bed_intervals = np.loadtxt(windows, usecols=[1, 2], dtype=float)
 # NB: implementing windowing for a fixed number of variants has a few gotchas,
 # one of which is that these should be segregating in the subset of samples.
 # Further, these will likely be further filtered by the processor class. To
 # make the windowing mechanism transparent, we keep it to "sequence windows"
-# specified two ways: a bed file that the user provides; or a window size in bp
-# that is triggered by `windows=[float|int]`.
+# specified as a bed file, so user is responsible for making decisions
 window_start = []
 window_end = []
 window_left = []
 window_right = []
 window_contig = []
 for i, contig_length in enumerate(vcz.contig_length):
+    # pull out windows
+    bed_idx = np.flatnonzero(bed_chrom == vcz.contig_id[i])
+    if bed_idx.size == 0: continue
+    left, right = bed_intervals[bed_idx].T
+    assert np.all(right > left), "Bed intervals are malformed"
+    assert np.all(left[1:] >= right[:-1]), "Bed intervals are not sorted"
+    # pull out variants
     contig_mask = vcz.variant_contig[:] == i
     assert np.any(contig_mask), f"No variants on {i}th contig"
     contig_offset = contig_mask.argmax()
     position = vcz.variant_position.get_mask_selection(contig_mask)
     assert np.all(np.diff(position)), f"Variants are out of order"
-    #if window_type == "bed":
-    #    assert False, "TODO"
-    #elif window_type == "sequence":
-    breaks = np.append(
-        np.arange(0, contig_length, window_size), 
-        contig_length,
-    )
-    left, right = breaks[:-1], breaks[1:]
-    # ---
+    # find start/end indices of variants in each window
     start = contig_offset + np.searchsorted(position, left, side='left')
     end = contig_offset + np.searchsorted(position, right, side='left')
     mask = end - start >= min_snps_per_window  # filter to minimum number of variants
@@ -114,11 +114,6 @@ window_end = np.array(window_end)
 window_left = np.array(window_left)
 window_right = np.array(window_right)
 n_windows = window_start.size
-# TODO: don't save this stuff, just put pointers/bounds into zarr below
-#zarr.save(f"{snakemake.input.vcz}/variant_window", variant_window)
-#zarr.save(f"{snakemake.input.vcz}/window_left", np.array(window_left))
-#zarr.save(f"{snakemake.input.vcz}/window_right", np.array(window_right))
-#zarr.save(f"{snakemake.input.vcz}/window_contig", np.array(window_contig))
 
 
 # assign windows to chunks via a yaml intermediate

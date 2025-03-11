@@ -23,8 +23,9 @@ parser.add_argument("--configfile", help="Config file used for snakemake trainin
 parser.add_argument("--outpath", help="Path to output directory", type=str, required=True)
 parser.add_argument("--num-contig", help="Number of contigs in VCF (eg chromosomes)", type=int, default=3)
 parser.add_argument("--sequence-length", help="Size of contigs (eg chromosome length)", type=float, default=10e6)
+parser.add_argument("--window-size", help="Size of windows", type=int, default=1e6)
+parser.add_argument("--window-by-variants", help="Window size is number of variants", action="store_true")
 parser.add_argument("--seed", help="Random seed passed to simulator", type=int, default=1024)
-parser.add_argument("--no-centromere", help="Don't mimic a centromere", action="store_true")
 args = parser.parse_args()
 
 
@@ -37,27 +38,37 @@ assert hasattr(simulator, "sequence_length"), "Simulator lacks `sequence_length`
 simulator.sequence_length = args.sequence_length
 
 
-# condition the simulator on particular parameter values
-torch.manual_seed(args.seed)
-theta = simulator.prior.sample()
-for i, p in enumerate(simulator.parameters):  # set prior to point mass
-    setattr(simulator, p, [theta[i].item()] * 2)
+## condition the simulator on particular parameter values
+#torch.manual_seed(args.seed)
+#theta = simulator.prior.sample()
+#for i, p in enumerate(simulator.parameters):  # set prior to point mass
+#    setattr(simulator, p, [theta[i].item()] * 2)
+# TODO: would need to regenerate the simulator here
+
+
+# parameters
+pars = open(os.path.join(args.outpath, f"pars.txt"), "w")
+pars.write("chrom")
+for p in simulator.parameters:
+    pars.write(f"\t{p}")
+pars.write("\n")
 
 
 # simulate data
 fa_path = os.path.join(args.outpath, f"anc.fa")
 vcf_path = os.path.join(args.outpath, f"snp.vcf")
+bed_path = os.path.join(args.outpath, f"windows.bed")
 tmp_path = []
 fa = open(fa_path, "w")
+if args.window_by_variants is not None: bedfile = open(bed_path, "w")
 for chrom in range(args.num_contig):
-    ts, _ = simulator(args.seed)
-    if not args.no_centromere:
-        ts = ts.delete_intervals(np.array([[0.4, 0.6]]) * ts.sequence_length)
+    ts, theta = simulator(args.seed + chrom)
+    chrom_id = f"chr{chrom}"
     indv_names = [f"IND{i}" for i in range(ts.num_individuals)]
     tmp_path.append(os.path.join(args.outpath, f"chr{chrom}.vcf"))
     ts.write_vcf(
         open(tmp_path[-1], "w"),
-        contig_id=f"chr{chrom}",
+        contig_id=f"{chrom_id}",
         individual_names=indv_names,
     )
     # ancestral fasta
@@ -66,9 +77,26 @@ for chrom in range(args.num_contig):
     anc = vcf["variants/REF"]
     fasta = np.full(int(ts.sequence_length), "N")
     fasta[pos - 1] = anc
-    fa.write(f">chr{chrom}\n")
+    fa.write(f">{chrom_id}\n")
     fa.write("".join(fasta) + "\n")
+    # parameters
+    pars.write(f"{chrom_id}")
+    for x in theta:
+        pars.write(f"\t{x}")
+    pars.write("\n")
+    # windows
+    if args.window_by_variants:
+        breaks = np.unique(np.append(pos[::args.window_size], pos[-1]))
+    else:
+        breaks = np.append(
+            np.arange(0, int(ts.sequence_length), args.window_size),
+            int(ts.sequence_length),
+        )
+    for l, r in zip(breaks[:-1], breaks[1:]):
+        bedfile.write(f"{chrom_id}\t{int(l)}\t{int(r)}\n")
 fa.close()
+pars.close()
+if args.window_by_variants is not None: bedfile.close()
 
 
 # compress, index, etc
@@ -77,13 +105,6 @@ pysam.bcftools.concat(*tmp_path, "-o", vcf_path, catch_stdout=False)
 pysam.tabix_index(vcf_path, preset="vcf", force=True)
 for vcf in tmp_path: os.remove(vcf)
 os.remove(fa_path)
-
-
-# parameters
-pars = open(os.path.join(args.outpath, f"pars.txt"), "w")
-for p, x in zip(simulator.parameters, theta):
-    pars.write(f"{p}\t{x}\n")
-pars.close()
 
 
 # population metadata

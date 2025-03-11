@@ -1,7 +1,7 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/home/adkern/popgensbi_snakemake/YRI_CEU_summ_stats"
+project_dir: "/sietch_colab/natep/popgensbi_snakemake/YRI_CEU"
 
 cpu_resources: # optional, used for CPU-only tasks (simulation)
   runtime: "2h"
@@ -15,7 +15,7 @@ gpu_resources: # optional, used for GPU tasks (training)
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
 random_seed: 1
-chunk_size: 100 # number of instances to simulate per worker
+n_chunk: 50 # number of instances to simulate per worker
 n_train: 1000
 n_val: 100
 n_test: 100
@@ -52,4 +52,11 @@ processor:
 embedding_network:
   class_name: "SummaryStatisticsEmbedding"
 
+prediction:
+  n_chunk: 10
+  vcf: "example_data/YRI_CEU/snp.vcf.gz"
+  ancestral_fasta: "example_data/YRI_CEU/anc.fa.gz"
+  population_map: "example_data/YRI_CEU/popmap.yaml" # subset of samples, with populations
+  windows: "example_data/YRI_CEU/windows.bed" # windows to predict over
+  min_snps_per_window: 100 # filter out low-density windows
 
