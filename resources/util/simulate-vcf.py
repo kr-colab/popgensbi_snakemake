@@ -8,6 +8,7 @@ import torch
 import allel
 import pysam
 import pysam.bcftools
+import textwrap
 
 # put popgensbi_snakemake scripts in the load path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "workflow", "scripts"))
@@ -23,8 +24,7 @@ parser.add_argument("--configfile", help="Config file used for snakemake trainin
 parser.add_argument("--outpath", help="Path to output directory", type=str, required=True)
 parser.add_argument("--num-contig", help="Number of contigs in VCF (eg chromosomes)", type=int, default=3)
 parser.add_argument("--sequence-length", help="Size of contigs (eg chromosome length)", type=float, default=10e6)
-parser.add_argument("--window-size", help="Size of windows", type=int, default=1e6)
-parser.add_argument("--window-by-variants", help="Window size is number of variants", action="store_true")
+parser.add_argument("--window-size", help="Size of windows in bp", type=int, default=1e6)
 parser.add_argument("--seed", help="Random seed passed to simulator", type=int, default=1024)
 args = parser.parse_args()
 
@@ -60,7 +60,7 @@ vcf_path = os.path.join(args.outpath, f"snp.vcf")
 bed_path = os.path.join(args.outpath, f"windows.bed")
 tmp_path = []
 fa = open(fa_path, "w")
-if args.window_by_variants is not None: bedfile = open(bed_path, "w")
+bedfile = open(bed_path, "w")
 for chrom in range(args.num_contig):
     ts, theta = simulator(args.seed + chrom)
     chrom_id = f"chr{chrom}"
@@ -70,6 +70,7 @@ for chrom in range(args.num_contig):
         open(tmp_path[-1], "w"),
         contig_id=f"{chrom_id}",
         individual_names=indv_names,
+        position_transform="legacy",  # 1-based indexing
     )
     # ancestral fasta
     vcf = allel.read_vcf(tmp_path[-1])
@@ -78,25 +79,22 @@ for chrom in range(args.num_contig):
     fasta = np.full(int(ts.sequence_length), "N")
     fasta[pos - 1] = anc
     fa.write(f">{chrom_id}\n")
-    fa.write("".join(fasta) + "\n")
+    fa.write("\n".join(textwrap.wrap("".join(fasta), 80)) + "\n")
     # parameters
     pars.write(f"{chrom_id}")
     for x in theta:
         pars.write(f"\t{x}")
     pars.write("\n")
     # windows
-    if args.window_by_variants:
-        breaks = np.unique(np.append(pos[::args.window_size], pos[-1]))
-    else:
-        breaks = np.append(
-            np.arange(0, int(ts.sequence_length), args.window_size),
-            int(ts.sequence_length),
-        )
+    breaks = np.append(
+        np.arange(0, int(ts.sequence_length), args.window_size),
+        int(ts.sequence_length),
+    )
     for l, r in zip(breaks[:-1], breaks[1:]):
         bedfile.write(f"{chrom_id}\t{int(l)}\t{int(r)}\n")
 fa.close()
 pars.close()
-if args.window_by_variants is not None: bedfile.close()
+bedfile.close()
 
 
 # compress, index, etc
