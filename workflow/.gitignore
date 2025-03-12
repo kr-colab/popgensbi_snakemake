@@ -1,3 +1,4 @@
+.snakemake
 *.swp
 *.swo
 .test-workflow/*

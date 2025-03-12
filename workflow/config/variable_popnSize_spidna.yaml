@@ -1,7 +1,7 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/home/adkern/popgensbi_snakemake/variable_popnSize_spidna"
+project_dir: "/sietch_colab/natep/popgensbi_snakemake/VariablePopulationSize"
 
 cpu_resources:
   runtime: "2h"
@@ -15,7 +15,7 @@ gpu_resources:
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
 random_seed: 1
-chunk_size: 100 # number of instances to simulate per worker
+n_chunk: 50 # number of instances to simulate per worker
 n_train: 10000
 n_val: 1000
 n_test: 1000
@@ -55,3 +55,10 @@ embedding_network:
   num_block: 6
   num_feature: 10
 
+prediction:
+  n_chunk: 10
+  vcf: "example_data/VariablePopulationSize/snp.vcf.gz"
+  ancestral_fasta: "example_data/VariablePopulationSize/anc.fa.gz"
+  population_map: "example_data/VariablePopulationSize/popmap.yaml" # subset of samples, with populations
+  windows: "example_data/VariablePopulationSize/windows.bed" # windows to predict over
+  min_snps_per_window: 400 # filter out low-density windows

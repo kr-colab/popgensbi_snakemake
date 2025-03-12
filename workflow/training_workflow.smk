@@ -1,29 +1,34 @@
+"""
+Train embedding network and normalising flow on simulations
+"""
+
 import os
 import numpy as np
 
-# TODO: can't specify a full default config here, as snakemake will
-# take union of this and another configfile, leading to
-# errors b/c of optional arguments for embedding net
-
-
 CPU_RESOURCES = config.get("cpu_resources", {})
 GPU_RESOURCES = config.get("gpu_resources", {})
+
+module common:
+    snakefile: "common.smk"
+    config: config
+
+# very annoyingly: imported rules are first in the rule order and will get
+# executed by default, yet we have to do the following to access variables, 
+# so we should never actually define any rules in `common`
+use rule * from common
+
+PROJECT_DIR = common.PROJECT_DIR
+EMBEDDING_NET = common.EMBEDDING_NET
+NORMALIZING_FLOW = common.NORMALIZING_FLOW
+RANDOM_SEED = common.RANDOM_SEED
+TRAIN_SEPARATELY = common.TRAIN_SEPARATELY
 
 # Simulation design
 N_TRAIN = int(config["n_train"])
 N_VAL = int(config["n_val"])
 N_TEST = int(config["n_test"])
-CHUNK_SIZE = int(config["chunk_size"])
-RANDOM_SEED = int(config["random_seed"])
-TRAIN_SEPARATELY = bool(config["train_embedding_net_separately"])
 
 # Directory structure
-SIMULATOR = config["simulator"]["class_name"]
-PROCESSOR = config["processor"]["class_name"]
-EMBEDDING = config["embedding_network"]["class_name"]
-UID = f"{SIMULATOR}-{PROCESSOR}-{EMBEDDING}-{RANDOM_SEED}-{N_TRAIN}"
-UID += "-trained_separately" if TRAIN_SEPARATELY else "-trained_end_to_end"
-PROJECT_DIR = os.path.join(config["project_dir"], UID)
 PLOT_DIR = os.path.join(PROJECT_DIR, "plots")
 LOG_DIR = os.path.join(PROJECT_DIR, "logs")
 TREE_DIR = os.path.join(PROJECT_DIR, "trees")
@@ -36,14 +41,11 @@ ZARR_FIELDS = ["features", "targets"]
 if TRAIN_SEPARATELY:
     SPLIT_SIZES += [N_TRAIN, N_VAL]
     SPLIT_NAMES += ["pre_train", "pre_val"]
-N_CHUNK = (np.sum(SPLIT_SIZES) + CHUNK_SIZE - 1) // CHUNK_SIZE
+N_CHUNK = int(config["n_chunk"])
 
-# Conditional naming of pickled networks
-EMBEDDING_NET_NAME = "embedding_network"
-NORMALIZING_FLOW_NAME = "normalizing_flow"
-if TRAIN_SEPARATELY:
-    EMBEDDING_NET_NAME = "pretrain_" + EMBEDDING_NET_NAME
-    NORMALIZING_FLOW_NAME = "pretrain_" + NORMALIZING_FLOW_NAME
+
+scattergather:
+    split = N_CHUNK,
 
 
 localrules: 
@@ -51,8 +53,10 @@ localrules:
     process_all,
     train_all,
     analyze_all,
-    plot_simulation_stats,
+    clean_simulation,
     clean_processing,
+    clean_all,
+
 
 rule analyze_all:
     input:
@@ -66,82 +70,73 @@ rule analyze_all:
 
 rule train_all:
     input:
-        embedding_net = os.path.join(PROJECT_DIR, EMBEDDING_NET_NAME),
-        normalizing_flow = os.path.join(PROJECT_DIR, NORMALIZING_FLOW_NAME),
+        embedding_net = EMBEDDING_NET,
+        normalizing_flow = NORMALIZING_FLOW,
 
 
 rule process_all:
     input:
-        expand(
-            os.path.join(TENSOR_DIR, "batch_{batch}.done"), 
-            batch=range(N_CHUNK),
-        )
+        done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-process.done")), 
 
 
 rule simulate_all:
     input:
-        expand(
-            os.path.join(TREE_DIR, "batch_{batch}.done"), 
-            batch=range(N_CHUNK),
-        )
+        done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-simulate.done")), 
 
 
-rule create_zarr:
-    message: "Creating zarr dataset..."
+rule setup_training:
+    message: "Setting up simulations and zarr storage..."
     output:
-        zarr = directory(os.path.join(TENSOR_DIR, "zarr"))
+        zarr = directory(os.path.join(TENSOR_DIR, "zarr")),
+        yaml = scatter.split(os.path.join(TREE_DIR, "{scatteritem}.yaml")),
     params:
         split_sizes = SPLIT_SIZES,
         split_names = SPLIT_NAMES,
-        chunk_size = CHUNK_SIZE,
         random_seed = RANDOM_SEED,
-        fields = ZARR_FIELDS,
     threads: 1
     resources: **CPU_RESOURCES
     script:
-        "scripts/create_zarr.py"
+        "scripts/setup_training.py"
 
 
 rule simulate_batch:
     message:
-        "Simulating batch {wildcards.batch} of tree sequences..."
+        "Simulating batch {wildcards.scatteritem} of tree sequences..."
     input:
-        zarr = rules.create_zarr.output.zarr,
+        zarr = rules.setup_training.output.zarr,
+        yaml = os.path.join(TREE_DIR, "{scatteritem}.yaml"),
     output:
-        done = os.path.join(TREE_DIR, "batch_{batch}.done")
+        done = touch(os.path.join(TREE_DIR, "{scatteritem}-simulate.done")),
     params:
-        batch_id = lambda wildcards: int(wildcards.batch),
-        batch_size = CHUNK_SIZE,
         simulator_config = config["simulator"],
     threads: 1
     resources: **CPU_RESOURCES
     script:
-        "scripts/simulate_ts_batch.py"
+        "scripts/simulate_batch.py"
 
 
 rule process_batch:
     message:
-        "Processing batch {wildcards.batch} of tree sequences..."
+        "Processing batch {wildcards.scatteritem} of tree sequences..."
     input:
-        zarr = rules.create_zarr.output.zarr,
+        zarr = rules.setup_training.output.zarr,
         done = rules.simulate_batch.output.done,
+        yaml = os.path.join(TREE_DIR, "{scatteritem}.yaml"),
     output:
-        done = touch(os.path.join(TENSOR_DIR, "batch_{batch}.done")),
+        done = touch(os.path.join(TREE_DIR, "{scatteritem}-process.done")),
     threads: 1
     resources: **CPU_RESOURCES
     params:
-        batch_id = lambda wildcards: int(wildcards.batch),
-        batch_size = CHUNK_SIZE,
         processor_config = config["processor"],
     script: 
-        "scripts/process_ts_batch.py"
+        "scripts/process_batch.py"
 
 
 rule train_embedding_net:
     message:
         "Training embedding network separately..."
     input:
-        zarr = rules.create_zarr.output.zarr,
+        zarr = rules.setup_training.output.zarr,
         done = rules.process_all.input,
     output:
         network = os.path.join(PROJECT_DIR, "pretrain_embedding_network"),
@@ -167,7 +162,7 @@ rule train_npe_on_embeddings:
     message:
         "Training posterior estimator with existing embeddings..."
     input:
-        zarr = rules.create_zarr.output.zarr,
+        zarr = rules.setup_training.output.zarr,
         network = rules.train_embedding_net.output.network,
     output:
         network = os.path.join(PROJECT_DIR, "pretrain_normalizing_flow"),
@@ -192,7 +187,7 @@ rule train_npe_on_features:
     message:
         "Training posterior estimator on features..."
     input:
-        zarr = rules.create_zarr.output.zarr,
+        zarr = rules.setup_training.output.zarr,
         done = rules.process_all.input,
     output:
         embedding_net = os.path.join(PROJECT_DIR, "embedding_network"),
@@ -219,7 +214,7 @@ rule plot_diagnostics:
     message:
         "Plotting diagnostics..."
     input:
-        zarr = rules.create_zarr.output.zarr,
+        zarr = rules.setup_training.output.zarr,
         embedding_net = rules.train_all.input.embedding_net,
         normalizing_flow = rules.train_all.input.normalizing_flow,
     output:
@@ -240,19 +235,11 @@ rule plot_diagnostics:
     script: "scripts/plot_diagnostics.py"
 
 
-rule clean_processing:
-    """
-    Remove processing .done files to force reprocessing of tree sequences
-    (without rerunning simulations).
-    """
-    shell:
-        "rm -f {TENSOR_DIR}/batch_*.done"
-
 rule plot_simulation_stats:
     message:
         "Plotting simulation stats..."
     input:
-        zarr = rules.create_zarr.output.zarr,
+        zarr = rules.setup_training.output.zarr,
     output:
         stats_hist = os.path.join(PLOT_DIR, "simulation_stats.png"),
         stats_vs_params_pairplot = os.path.join(PLOT_DIR, "stats_vs_params_pairplot.png"),
@@ -261,4 +248,38 @@ rule plot_simulation_stats:
         simulator_config = config["simulator"],
         tree_dir = TREE_DIR,
     threads: 10
+    resources: **CPU_RESOURCES
     script: "scripts/plot_simulation_stats.py"
+
+
+rule clean_setup:
+    params:
+        setup = rules.setup_training.output,
+    shell: "rm -rf {params.setup}"
+
+
+rule clean_simulation:
+    params:
+        simulation = rules.simulate_all.input,
+        tree_dir = TREE_DIR,
+    shell: "rm -rf {params.simulation} {params.tree_dir}/*.trees"
+
+
+rule clean_processing:
+    params:
+        processing = rules.process_all.input,
+    shell: "rm -rf {params.processing}"
+
+
+rule clean_training:
+    params:
+        plot_dir = PLOT_DIR,
+        networks = rules.train_all.input,
+    shell: "rm -rf {params.networks} {params.plot_dir}"
+
+
+rule clean_all:
+    params:
+        dir = [TREE_DIR, TENSOR_DIR, PLOT_DIR, LOG_DIR],
+        networks = rules.train_all.input,
+    shell: "rm -rf {params.dir} {params.networks}"

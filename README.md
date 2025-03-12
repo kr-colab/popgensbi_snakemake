@@ -10,7 +10,7 @@ A Snakemake workflow for simulation-based inference in population genetics.
 
 ## Contents
 
-The main workflow for this package is contained in `workflow/Snakefile`. 
+The main workflow for this package is contained in `workflow/training_workflow.smk`. 
 This will run a complete neural posterior estimation workflow based on a given config file. For more details, see the [docs](https://popgensbi-snakemake.readthedocs.io/en/latest/).
 
 ## Environment setup
@@ -18,7 +18,7 @@ This will run a complete neural posterior estimation workflow based on a given c
 Current environment is set up with conda. To install the environment, run
 
 ```bash
-conda env create -f workflow/environment.yaml
+conda env create -f environment.yaml
 ```
 
 ## Basic usage
@@ -31,8 +31,29 @@ neural posterior estimation of a two-epoch demographic model with a CNN embeddin
 To run the workflow, you can use the following command:
 
 ```bash
-snakemake --configfile config/AraTha_2epoch_cnn.yaml --snakefile workflow/Snakefile
+snakemake --configfile config/AraTha_2epoch_cnn.yaml --snakefile workflow/training_workflow.smk
 ```
+
+## Simulate data for VCF prediction
+
+Example data for the VCF prediction pipeline may be created via
+
+```bash
+python resources/util/simulate-vcf.py \
+  --outpath "example_data/AraTha_2epoch" \
+  --window-size 1000000 \
+  --configfile workflow/config/AraTha_2epoch_cnn.yaml
+```
+
+## VCF prediction pipeline
+
+To generate predictions along windows in the VCF,
+
+```bash
+snakemake --configfile config/AraTha_2epoch_cnn.yaml --snakefile workflow/prediction_workflow.smk
+```
+
+TODO: more details on input files, when this is finalized
 
 ## Cluster usage quickstart
 

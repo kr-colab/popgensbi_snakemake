@@ -1,7 +1,7 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/home/adkern/popgensbi_snakemake/AraTha_2epoch_dinf"
+project_dir: "/sietch_colab/natep/popgensbi_snakemake/AraTha_2epoch"
 
 cpu_resources:
   runtime: "2h"
@@ -15,10 +15,10 @@ gpu_resources:
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
 random_seed: 1
-chunk_size: 100 # number of instances to simulate per worker
-n_train: 1000
-n_val: 100
-n_test: 100
+n_chunk: 50 # number of jobs for parallel simulation
+n_train: 5000
+n_val: 1000
+n_test: 1000
 
 train_embedding_net_separately: True # train embedding network separately from normalizing flow
 use_cache: True # load features into CPU memory
@@ -42,8 +42,9 @@ simulator:
 processor:
   class_name: "genotypes_and_distances"
   # OPTIONAL CLASS KWARGS:
-  n_snps: 2000
-  maf_thresh: 0.05
+  max_snps: 10000
+  min_freq: 0.00
+  max_freq: 0.00
 
 embedding_network:
   class_name: "RNN"
@@ -51,3 +52,10 @@ embedding_network:
   input_size: 21 # num individuals + 1
   output_size: 64
 
+prediction:
+  n_chunk: 10
+  vcf: "example_data/AraTha_2epoch/snp.vcf.gz"
+  ancestral_fasta: "example_data/AraTha_2epoch/anc.fa.gz"
+  population_map: "example_data/AraTha_2epoch/popmap.yaml" # subset of samples, with populations
+  windows: "example_data/AraTha_2epoch/windows.bed" # windows to predict over
+  min_snps_per_window: 100 # filter out low-density windows
