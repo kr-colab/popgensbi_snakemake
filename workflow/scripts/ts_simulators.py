@@ -307,12 +307,14 @@ class Cattle_21Gen(BaseSimulator):
     """
     default_config = {
         # FIXED PARAMETERS
-        "samples": {"pop": 25},
+        "samples": {"pop0": 25},
         "sequence_length": 2e6,
         "mutation_rate": 1e-8,
         "num_time_windows": 21,
+        "maf": 0.05,
         # RANDOM PARAMETERS (UNIFORM)
         "pop_sizes": [10, 1e5],      # Range for population sizes (log10 space)
+        "pop_changes": [-1, 1],      # Range for population size changes (* 10 ** beta)
         "recomb_rate": [1e-9, 1e-8],  # Range for recombination rate
         # TIME PARAMETERS
         "max_time": 130000,  # Maximum time for population events
@@ -322,14 +324,15 @@ class Cattle_21Gen(BaseSimulator):
     def __init__(self, config: dict):
         super().__init__(config, self.default_config)
         # Set up parameters list
-        self.parameters = [f"N_{i}" for i in range(self.num_time_windows)] + ["recomb_rate"]
+        self.parameters = ["N_0"] + [f"beta_{i}" for i in range(1,self.num_time_windows)] + ["recomb_rate"]
         
         # Create parameter ranges in the same format as AraTha_2epoch
         # Population sizes (in log10 space)
-        pop_size_ranges = [[np.log10(self.pop_sizes[0]), np.log10(self.pop_sizes[1])] 
-                          for _ in range(self.num_time_windows)]
+        pop_size_range = [[np.log10(self.pop_sizes[0]), np.log10(self.pop_sizes[1])]]
+        pop_change_ranges = [[self.pop_changes[0], self.pop_changes[1]]
+                             for _ in range(1,self.num_time_windows)]
         # Add recombination rate range
-        param_ranges = pop_size_ranges + [self.recomb_rate]
+        param_ranges = pop_size_range + pop_change_ranges + [self.recomb_rate]
         
         # Set up prior using BoxUniform
         self.prior = BoxUniform(
@@ -349,22 +352,27 @@ class Cattle_21Gen(BaseSimulator):
     
     def _generate_dependent_pop_sizes(self) -> np.ndarray:
         """
-        Generate a sequence of population sizes (in the log scale) where
-        the fist log10(population size) is sampled from a uniform distribution
-        corresponding to the most recent time window. The following population
-        sizes are generated following N_i = N_{i-1} * 10 ^ β for i in [1,21].
+        Generate a sequence of population sizes where the first population size
+        is sampled from a uniform distribution corresponding to the most recent
+        time window. The following population sizes are generated following
+        N_i = N_{i-1} * 10 ^ β for i in [1,...,num_time_windows], unless N_i
+        is outside of pop_ranges. If so N_i is set to the max/min population size
         """
-        # Sample the first value uniformly within the log10 bounds
-        log_values = self.prior.sample().numpy()
-        # For subsequent time windows, sample a new value based on the previous one
+        prior_sample = self.prior.sample().numpy()
+        # The first value is uniformly sampled within the log10 bounds
+        # Transform into population size N_0
+        prior_sample[0] = prior_sample[0] * 10 ** prior_sample[0]
+        # For subsequent time windows, calculate the new value based on the previous one and beta
         for i in range(1, self.num_time_windows):
-            new_value = 10 ** self.pop_sizes[0] - 1
-            while new_value > self.pop_sizes[1] or new_value < self.pop_sizes[0]:
-                new_value = log_values[i - 1] * 10 ** np.random.uniform(-1, 1)
-            log_values[i] = np.log10(new_value)
+            new_value = prior_sample[i - 1] * 10 ** prior_sample[i]
+            if new_value > self.pop_sizes[1]:
+                new_value = self.pop_sizes[1]
+            if new_value < self.pop_sizes[0]:
+                new_value = self.pop_sizes[0]
+            prior_sample[i] = new_value
 
-        # Convert back to the original scale
-        return log_values
+        # Return N_i and recombination rate
+        return prior_sample
 
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
         if seed is not None:
@@ -378,8 +386,7 @@ class Cattle_21Gen(BaseSimulator):
             # Sample parameters directly from prior (like AraTha_2epoch)
             theta = self._generate_dependent_pop_sizes()
             
-            # Convert population sizes from log10 space
-            pop_sizes = 10 ** theta[:-1]  # All but last element are population sizes
+            pop_sizes = theta[:-1]  # All but last element are population sizes
             recomb_rate = theta[-1]  # Last element is recombination rate
             
             # Create demography
@@ -397,7 +404,7 @@ class Cattle_21Gen(BaseSimulator):
 
             # Simulate ancestry
             ts = msprime.sim_ancestry(
-                samples={"pop0": self.samples["pop"]},
+                samples=self.samples,
                 demography=demography,
                 sequence_length=self.sequence_length,
                 recombination_rate=recomb_rate,
@@ -409,16 +416,12 @@ class Cattle_21Gen(BaseSimulator):
             
             # Check if we have enough SNPs after MAF filtering
             geno = ts.genotype_matrix().T
-            num_sample = geno.shape[0]
-            if (geno==2).any():
-                num_sample *= 2
+            num_sample = ts.num_samples
             
             row_sum = np.sum(geno, axis=0)
             keep = np.logical_and.reduce([
-                row_sum != 0,
-                row_sum != num_sample,
-                row_sum > num_sample * 0.05,
-                num_sample - row_sum > num_sample * 0.05
+                row_sum > num_sample * self.maf,
+                num_sample - row_sum > num_sample * self.maf
             ])
             
             if np.sum(keep) >= min_snps:

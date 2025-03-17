@@ -1,21 +1,21 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/home/adkern/popgensbi_snakemake/variable_popnSize_spidna"
+project_dir: "/home/franz/popgensbi_snakemake/temp"
 
 cpu_resources:
   runtime: "2h"
-  mem_mb: 16000
+  mem_mb: 5000
 
 gpu_resources: 
   runtime: "4h"
-  mem_mb: 50000
+  mem_mb: 5000
   gpus: 1
   slurm_partition: "kerngpu,gpu"
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
 random_seed: 991
-chunk_size: 2 # number of instances to simulate per worker
+n_chunk: 2 # number of instances to simulate per worker
 n_train: 1000
 n_val: 200
 n_test: 200
@@ -31,7 +31,7 @@ clip_max_norm: 5
 packed_sequence: False
 
 simulator:
-  class_name: "VariablePopulationSize"
+  class_name: "Cattle_21Gen"
   # OPTIONAL CLASS KWARGS:
   sequence_length: 2000000
   mutation_rate: 1e-8
@@ -39,10 +39,10 @@ simulator:
   max_time: 130000
   time_rate: 0.06
   samples:
-    pop: 25
+    pop0: 25
 
 processor:
-  class_name: "tskit_windowed_sfs_plus_ld"
+  class_name: "tskit_sfs"
   # OPTIONAL CLASS KWARGS:
   window_size: 1_000_000
   span_normalise: False
