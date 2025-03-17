@@ -66,6 +66,10 @@ rule analyze_all:
         at_prior_mean = os.path.join(PLOT_DIR, "posterior_at_prior_mean.png"),
         at_prior_low = os.path.join(PLOT_DIR, "posterior_at_prior_low.png"),
         at_prior_high = os.path.join(PLOT_DIR, "posterior_at_prior_high.png"),
+        sim_stats = os.path.join(PLOT_DIR, "simulation_stats.png"),
+        sim_pairplot = os.path.join(PLOT_DIR, "stats_vs_params_pairplot.png"),
+        sim_heatmaps = os.path.join(PLOT_DIR, "stats_heatmaps.png"),
+
 
 
 rule train_all:
@@ -240,6 +244,7 @@ rule plot_simulation_stats:
         "Plotting simulation stats..."
     input:
         zarr = rules.setup_training.output.zarr,
+        simulate_done = rules.simulate_all.input,
     output:
         stats_hist = os.path.join(PLOT_DIR, "simulation_stats.png"),
         stats_vs_params_pairplot = os.path.join(PLOT_DIR, "stats_vs_params_pairplot.png"),
