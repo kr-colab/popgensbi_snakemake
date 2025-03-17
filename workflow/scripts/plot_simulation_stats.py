@@ -18,7 +18,7 @@ parameters = simulator.parameters
 
 
 # open zarr file; extract targets
-z = zarr.open(snakemake.input.zarr)
+z = zarr.open(snakemake.input.zarr, mode="a")
 param_values = np.array([arr for arr in z.targets])
 df = pd.DataFrame(param_values, columns=parameters)
 
@@ -31,7 +31,7 @@ def process_tree(i):
     # calculate and return summary statistics for the tree
     return [
         ts.segregating_sites(span_normalise=False), 
-        ts.diversity(mode="branch", span_normalise=True),
+        ts.diversity(mode="site", span_normalise=True),
         ts.Tajimas_D(),
     ]
 # Create a pool of workers and process the jobs in parallel
@@ -43,6 +43,11 @@ with Pool(processes=num_workers) as pool:
 
 stats = np.array(results)    
 df["segregating_sites"], df["diversity"], df["Tajimas_D"] = stats.T
+
+for key, stat in zip(["segregating_sites", "diversity", "Tajimas_D"], stats.T):
+    if key in z:
+        del z[key]
+    z.create_dataset(key, data=stat, shape=stat.shape, dtype=stat.dtype)
 
 # plot histograms of stats
 fig, axs = plt.subplots(1, 3, figsize=(12, 4))
