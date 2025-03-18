@@ -199,7 +199,7 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
         super().__init__(config, self.default_config)
         
     # Cleaned up LD calculator
-    def _LD(haplotype, pos_vec, size_chr, distance_bins=None):
+    def _LD(self, haplotype, pos_vec, size_chr, distance_bins=None):
         """
         Compute LD for a subset of SNPs and return a DataFrame with only the mean r2.
         """
@@ -218,8 +218,7 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
         selected_snps = []
         for gap in gaps:
             snps = np.arange(0, n_SNP, gap) + np.random.randint(0, (n_SNP - 1) % gap + 1)
-            snp_pairs = np.unique([((snps[i] + i) % n_SNP, (snps[i + 1] + i) % n_SNP)
-                                for i in range(len(snps) - 1)], axis=0)
+            snp_pairs = np.unique([((snps[i] + i) % n_SNP, (snps[i + 1] + i) % n_SNP) for i in range(len(snps) - 1)], axis=0)
 
             snp_pairs = snp_pairs[snp_pairs[:, 0] < snp_pairs[:, 1]]
             last_pair = snp_pairs[-1]
@@ -245,7 +244,7 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
             sd["gap_id"] = i
             ld = pd.concat([ld, sd])
 
-        ld2 = ld.dropna().groupby("dist_group",observed=True).agg(agg_bins)
+        ld2 = ld.dropna().groupby("dist_group",observed=False).agg(agg_bins)
 
         # Flatten the MultiIndex columns and rename explicitly
         ld2.columns = ['_'.join(col).strip() for col in ld2.columns.values]
