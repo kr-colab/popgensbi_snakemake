@@ -151,7 +151,7 @@ class VariablePopulationSize(BaseSimulator):
 
     default_config = {
         # FIXED PARAMETERS
-        "samples": {"pop": 10},
+        "samples": {"pop0": 10},
         "sequence_length": 10e6,
         "mutation_rate": 1.5e-8,
         "num_time_windows": 3,
@@ -222,7 +222,7 @@ class VariablePopulationSize(BaseSimulator):
 
             # Simulate ancestry
             ts = msprime.sim_ancestry(
-                samples={"pop0": self.samples["pop"]},
+                samples=self.samples,
                 demography=demography,
                 sequence_length=self.sequence_length,
                 recombination_rate=recomb_rate,
@@ -359,20 +359,21 @@ class Cattle_21Gen(BaseSimulator):
         is outside of pop_ranges. If so N_i is set to the max/min population size
         """
         prior_sample = self.prior.sample().numpy()
+        modified_prior = prior_sample.copy()
         # The first value is uniformly sampled within the log10 bounds
         # Transform into population size N_0
-        prior_sample[0] = prior_sample[0] * 10 ** prior_sample[0]
+        modified_prior[0] = 10 ** prior_sample[0]
         # For subsequent time windows, calculate the new value based on the previous one and beta
         for i in range(1, self.num_time_windows):
-            new_value = prior_sample[i - 1] * 10 ** prior_sample[i]
+            new_value = modified_prior[i - 1] * 10 ** prior_sample[i]
             if new_value > self.pop_sizes[1]:
                 new_value = self.pop_sizes[1]
             if new_value < self.pop_sizes[0]:
                 new_value = self.pop_sizes[0]
-            prior_sample[i] = new_value
+            modified_prior[i] = new_value
 
         # Return N_i and recombination rate
-        return prior_sample
+        return prior_sample, modified_prior
 
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
         if seed is not None:
@@ -384,10 +385,10 @@ class Cattle_21Gen(BaseSimulator):
         
         while attempt < max_attempts:
             # Sample parameters directly from prior (like AraTha_2epoch)
-            theta = self._generate_dependent_pop_sizes()
+            theta, theta_mod = self._generate_dependent_pop_sizes()
             
-            pop_sizes = theta[:-1]  # All but last element are population sizes
-            recomb_rate = theta[-1]  # Last element is recombination rate
+            pop_sizes = theta_mod[:-1]  # All but last element are population sizes
+            recomb_rate = theta_mod[-1]  # Last element is recombination rate
             
             # Create demography
             demography = msprime.Demography()
