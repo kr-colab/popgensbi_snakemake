@@ -117,6 +117,19 @@ simulator:
     pop: 10
 '''
 
+# Variable Population Size Simulator configuration
+cattle21gen_config = '''
+simulator:
+  class_name: "Cattle_21Gen"
+  sequence_length: 2000000
+  mutation_rate: 1e-8
+  num_time_windows: 21
+  max_time: 130000
+  time_rate: 0.06
+  samples:
+    pop: 25
+'''
+
 SPIDNA_config = '''
 packed_sequence: False
 
@@ -378,4 +391,28 @@ def test_summary_stats2_workflow(strategy_name, strategy_config, cache_name, cac
             test_workflow_dir=test_workflow_dir
         )
     finally:
-        cleanup_test_environment(test_name) 
+        cleanup_test_environment(test_name)
+
+
+@pytest.mark.parametrize("strategy_name,strategy_config,cache_name,cache_config", test_params)
+def test_summary_stats3_workflow(strategy_name, strategy_config, cache_name, cache_config):
+    """Test the Summary Statistics workflow configuration."""
+    test_name = f"sumstats-{strategy_name}-{cache_name}"
+    try:
+        test_workflow_dir = setup_test_environment(test_name)
+        _run_workflow_with_config(
+            base_config=config,
+            sim_config={
+                'class_name': 'Cattle_21Gen',
+                'config': cattle21gen_config
+            },
+            arch_config={
+                'name': f'SUMMARY_STATS-{strategy_name}-{cache_name}',
+                'config': sum_stats_config_2
+            },
+            strategy_config=strategy_config,
+            cache_config=cache_config,
+            test_workflow_dir=test_workflow_dir
+        )
+    finally:
+        cleanup_test_environment(test_name)  
