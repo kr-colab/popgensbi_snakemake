@@ -42,9 +42,9 @@ simulator:
 processor:
   class_name: "genotypes_and_distances"
   # OPTIONAL CLASS KWARGS:
-  max_snps: 10000
+  max_snps: 2000
   min_freq: 0.00
-  max_freq: 0.00
+  max_freq: 1.00
 
 embedding_network:
   class_name: "RNN"
