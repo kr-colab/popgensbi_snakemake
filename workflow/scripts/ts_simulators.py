@@ -361,19 +361,18 @@ class Cattle_21Gen(BaseSimulator):
         prior_sample = self.prior.sample().numpy()
         modified_prior = prior_sample.copy()
         # The first value is uniformly sampled within the log10 bounds
-        # Transform into population size N_0
-        modified_prior[0] = 10 ** prior_sample[0]
-        # For subsequent time windows, calculate the new value based on the previous one and beta
         for i in range(1, self.num_time_windows):
-            new_value = modified_prior[i - 1] * 10 ** prior_sample[i]
-            if new_value > self.pop_sizes[1]:
-                new_value = self.pop_sizes[1]
-            if new_value < self.pop_sizes[0]:
-                new_value = self.pop_sizes[0]
+            # For subsequent time windows, calculate the new value based on the previous one and beta
+            new_value = modified_prior[i - 1] + prior_sample[i]
+            # If the new value is outside the bounds, set it to the max/min
+            if new_value > np.log10(self.pop_sizes[1]):
+                new_value = np.log10(self.pop_sizes[1])
+            if new_value < np.log10(self.pop_sizes[0]):
+                new_value = np.log10(self.pop_sizes[0])
             modified_prior[i] = new_value
 
-        # Return N_i and recombination rate
-        return prior_sample, modified_prior
+        # Return the sampled prior and recombination rate
+        return modified_prior
 
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
         if seed is not None:
@@ -385,10 +384,10 @@ class Cattle_21Gen(BaseSimulator):
         
         while attempt < max_attempts:
             # Sample parameters directly from prior (like AraTha_2epoch)
-            theta, theta_mod = self._generate_dependent_pop_sizes()
+            theta = self._generate_dependent_pop_sizes()
             
-            pop_sizes = theta_mod[:-1]  # All but last element are population sizes
-            recomb_rate = theta_mod[-1]  # Last element is recombination rate
+            pop_sizes = 10**theta[:-1]  # All but last element are for the population sizes
+            recomb_rate = theta[-1]  # Last element is recombination rate
             
             # Create demography
             demography = msprime.Demography()
@@ -432,4 +431,4 @@ class Cattle_21Gen(BaseSimulator):
             if seed is not None:
                 seed += 1
         
-        raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")
+        raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")    
