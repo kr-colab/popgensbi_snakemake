@@ -151,15 +151,16 @@ class VariablePopulationSize(BaseSimulator):
 
     default_config = {
         # FIXED PARAMETERS
-        "samples": {"pop0": 10},
-        "sequence_length": 10e6,
-        "mutation_rate": 1.5e-8,
-        "num_time_windows": 3,
+        "samples": {"pop0": 25},
+        "sequence_length": 2e6,
+        "mutation_rate": 1e-8,
+        "num_time_windows": 21,
+        "maf": 0.05,
         # RANDOM PARAMETERS (UNIFORM)
-        "pop_sizes": [1e2, 1e5],      # Range for population sizes (log10 space)
-        "recomb_rate": [1e-9, 1e-7],  # Range for recombination rate
+        "pop_sizes": [10, 1e5],      # Range for population sizes (log10 space)
+        "recomb_rate": [1e-9, 1e-8],  # Range for recombination rate
         # TIME PARAMETERS
-        "max_time": 100000,  # Maximum time for population events
+        "max_time": 130000,  # Maximum time for population events
         "time_rate": 0.1,    # Rate at which time changes across windows
     }
 
