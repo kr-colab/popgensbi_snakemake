@@ -1,7 +1,7 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/home/franz/popgensbi_snakemake/temp"
+project_dir: "/temp"
 
 cpu_resources:
   runtime: "2h"

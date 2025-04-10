@@ -324,20 +324,25 @@ class Cattle_21Gen(BaseSimulator):
     def __init__(self, config: dict):
         super().__init__(config, self.default_config)
         # Set up parameters list
-        self.parameters = ["N_0"] + [f"beta_{i}" for i in range(1,self.num_time_windows)] + ["recomb_rate"]
+        self.parameters = [f"N_{i}" for i in range(self.num_time_windows)] + ["recomb_rate"]
         
         # Create parameter ranges in the same format as AraTha_2epoch
         # Population sizes (in log10 space)
-        pop_size_range = [[np.log10(self.pop_sizes[0]), np.log10(self.pop_sizes[1])]]
+        pop_size_range = [[np.log10(self.pop_sizes[0]), np.log10(self.pop_sizes[1])]
+                          for _ in range(self.num_time_windows)]
         pop_change_ranges = [[self.pop_changes[0], self.pop_changes[1]]
                              for _ in range(1,self.num_time_windows)]
         # Add recombination rate range
-        param_ranges = pop_size_range + pop_change_ranges + [self.recomb_rate]
+        param_ranges = pop_size_range + [self.recomb_rate]
         
         # Set up prior using BoxUniform
         self.prior = BoxUniform(
             low=torch.tensor([r[0] for r in param_ranges]),
             high=torch.tensor([r[1] for r in param_ranges])
+        )
+        self.beta_prior = BoxUniform(
+            low=torch.tensor([b[0] for b in pop_change_ranges]),
+            high=torch.tensor([b[1] for b in pop_change_ranges])
         )
         
         # Calculate fixed time points for population size changes
@@ -359,17 +364,18 @@ class Cattle_21Gen(BaseSimulator):
         is outside of pop_ranges. If so N_i is set to the max/min population size
         """
         prior_sample = self.prior.sample().numpy()
+        beta_sample = self.beta_prior.sample().numpy()
         modified_prior = prior_sample.copy()
         # The first value is uniformly sampled within the log10 bounds
-        for i in range(1, self.num_time_windows):
+        for i in range(self.num_time_windows-1):
             # For subsequent time windows, calculate the new value based on the previous one and beta
-            new_value = modified_prior[i - 1] + prior_sample[i]
+            new_value = modified_prior[i] + beta_sample[i]
             # If the new value is outside the bounds, set it to the max/min
             if new_value > np.log10(self.pop_sizes[1]):
                 new_value = np.log10(self.pop_sizes[1])
             if new_value < np.log10(self.pop_sizes[0]):
                 new_value = np.log10(self.pop_sizes[0])
-            modified_prior[i] = new_value
+            modified_prior[i+1] = new_value
 
         # Return the sampled prior and recombination rate
         return modified_prior
