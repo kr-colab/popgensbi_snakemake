@@ -55,4 +55,6 @@ prediction:
   n_chunk: 10
   vcf: "example_data/VariablePopulationSize/snp.vcf.gz"
   ancestral_fasta: "example_data/VariablePopulationSize/anc.fa.gz"
-"workflow/config/variablepopsize.yaml" 61L, 1542B                                                                                                             51,18         66%
+  population_map: "example_data/VariablePopulationSize/popmap.yaml" # subset of samples, with populations
+  windows: "example_data/VariablePopulationSize/windows.bed" # windows to predict over
+  min_snps_per_window: 400 # filter out low-density windows
