@@ -1,7 +1,7 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/temp"
+project_dir: "cattle_21Gen"
 
 cpu_resources:
   runtime: "2h"
@@ -16,9 +16,9 @@ gpu_resources:
 
 random_seed: 991
 n_chunk: 2 # number of instances to simulate per worker
-n_train: 1000
-n_val: 200
-n_test: 200
+n_train: 10000
+n_val: 2000
+n_test: 2000
 
 train_embedding_net_separately: True # train embedding network separately from normalizing flow
 use_cache: True # load features into CPU memory
