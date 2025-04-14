@@ -157,7 +157,7 @@ class VariablePopulationSize(BaseSimulator):
         "num_time_windows": 21,
         "maf": 0.05,
         # RANDOM PARAMETERS (UNIFORM)
-        "pop_sizes": [10, 1e5],      # Range for population sizes (log10 space)
+        "pop_sizes": [1e2, 1e5],      # Range for population sizes (log10 space)
         "recomb_rate": [1e-9, 1e-8],  # Range for recombination rate
         # TIME PARAMETERS
         "max_time": 130000,  # Maximum time for population events
@@ -314,7 +314,7 @@ class Cattle_21Gen(BaseSimulator):
         "num_time_windows": 21,
         "maf": 0.05,
         # RANDOM PARAMETERS (UNIFORM)
-        "pop_sizes": [10, 1e5],      # Range for population sizes (log10 space)
+        "pop_sizes": [1e2, 1e5],      # Range for population sizes (log10 space)
         "pop_changes": [-1, 1],      # Range for population size changes (* 10 ** beta)
         "recomb_rate": [1e-9, 1e-8],  # Range for recombination rate
         # TIME PARAMETERS
