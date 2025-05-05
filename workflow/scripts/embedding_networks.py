@@ -59,7 +59,7 @@ class SymmetricLayer(nn.Module):
 # - remove the need to specify the unpadded input shapes, this can be figured out in forward
 # - the logic in forward requires a batch dimension
 # - could use the built-in symmetric layer from SBI
-class ExchangeableCNN_IN(nn.Module):
+class ExchangeableCNN(nn.Module):
     """
     This implements the Exchangeable CNN or permuation-invariant CNN from:
         Chan et al. 2018, https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7687905/

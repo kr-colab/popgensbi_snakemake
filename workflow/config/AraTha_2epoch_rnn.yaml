@@ -16,7 +16,7 @@ gpu_resources:
 
 random_seed: 1
 n_chunk: 50 # number of jobs for parallel simulation
-n_train: 5000
+n_train: 10000
 n_val: 1000
 n_test: 1000
 
@@ -26,36 +26,36 @@ optimizer: "Adam"
 batch_size: 32
 learning_rate: 0.0005
 max_num_epochs: 200
-stop_after_epochs: 20
+stop_after_epochs: 100
 clip_max_norm: 5
 packed_sequence: True
 
 simulator:
   class_name: "AraTha_2epoch"
   # OPTIONAL CLASS KWARGS:
-  sequence_length: 1000000
+  sequence_length: 100000
   mutation_rate: 1.5e-8
   recombination_rate: 1.5e-8
   samples:
-    SouthMiddleAtlas: 20
+    SouthMiddleAtlas: 10
 
 processor:
   class_name: "genotypes_and_distances"
   # OPTIONAL CLASS KWARGS:
-  max_snps: 10000
+  max_snps: 2000
   min_freq: 0.00
-  max_freq: 0.00
+  max_freq: 1.00
 
 embedding_network:
   class_name: "RNN"
   # OPTIONAL CLASS KWARGS:
-  input_size: 21 # num individuals + 1
+  input_size: 11 # num individuals + 1
   output_size: 64
 
 prediction:
-  n_chunk: 10
+  n_chunk: 50
   vcf: "example_data/AraTha_2epoch/snp.vcf.gz"
   ancestral_fasta: "example_data/AraTha_2epoch/anc.fa.gz"
   population_map: "example_data/AraTha_2epoch/popmap.yaml" # subset of samples, with populations
   windows: "example_data/AraTha_2epoch/windows.bed" # windows to predict over
-  min_snps_per_window: 100 # filter out low-density windows
+  min_snps_per_window: 1 # filter out low-density windows

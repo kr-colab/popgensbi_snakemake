@@ -1,0 +1,14 @@
+project_dir: "/sietch_colab/data_share/popgen_npe/AraTha_2epoch/posterior-comparison"
+config_dir: "npe-config"  # look here for neural net configs
+num_workers: 20           # number of workers (each uses 4 cpus)
+random_seed: 1024         # global random seed
+num_simulations: 1000     # number of parameter draws
+size_bounds: [0.0, 1.0]   # bounds for draws of parameter "nu"
+time_bounds: [0.0, 1.5]   # bounds for draws of parameter "T"
+
+gpu_resources: 
+  runtime: "4h"
+  mem_mb: 50000
+  gpus: 1
+  slurm_partition: "kerngpu,gpu"
+  slurm_extra: "--gres=gpu:1 --constraint=a100"

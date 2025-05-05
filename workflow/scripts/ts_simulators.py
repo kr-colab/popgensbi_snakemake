@@ -116,6 +116,9 @@ class AraTha_2epoch(BaseSimulator):
             high=torch.tensor([getattr(self, p)[1] for p in self.parameters]),
         )
 
+    # TODO: redo this so that--
+    #   - we're not modifying a stdpopsim.DemographicModel
+    #   - the mutation/recombination rates can be set from the config
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
         torch.manual_seed(seed)
         theta = self.prior.sample().numpy()
