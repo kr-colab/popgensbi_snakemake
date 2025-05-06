@@ -301,9 +301,9 @@ class recombination_rate(BaseSimulator):
         return ts, theta
 
 
-class Cattle_21Gen(BaseSimulator):
+class DependentVariablePopulationSize(BaseSimulator):
     """
-    Simulate a cattle population with population size across 21 time windows.
+    Simulate a population with variable population size across multiple time windows.
     The model consists of a single population that undergoes multiple size changes.
     """
     default_config = {
@@ -358,13 +358,14 @@ class Cattle_21Gen(BaseSimulator):
     
     def _generate_dependent_pop_sizes(self) -> np.ndarray:
         """
-        Generate a sequence of population sizes where the first population size
+        Generate a sequence of population sizes where the first population size N_1
         is sampled from a uniform distribution corresponding to the most recent
         time window. The following population sizes are generated following
-        N_i = N_{i-1} * 10 ^ β for i in [1,...,num_time_windows], unless N_i
+        N_i = N_{i-1} * 10 ^ β for i in [2,...,num_time_windows], unless N_i
         is outside of pop_ranges. If so N_i is set to the max/min population size
         """
         prior_sample = self.prior.sample().numpy()
+        # only the first sample from prior will be used
         beta_sample = self.beta_prior.sample().numpy()
         modified_prior = prior_sample.copy()
         # The first value is uniformly sampled within the log10 bounds

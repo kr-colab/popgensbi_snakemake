@@ -118,9 +118,9 @@ simulator:
 '''
 
 # Variable Population Size Simulator configuration
-cattle21gen_config = '''
+dependent_popn_config = '''
 simulator:
-  class_name: "Cattle_21Gen"
+  class_name: "DependentVariablePopulationSize"
   sequence_length: 2000000
   mutation_rate: 1e-8
   num_time_windows: 21
@@ -403,8 +403,8 @@ def test_summary_stats3_workflow(strategy_name, strategy_config, cache_name, cac
         _run_workflow_with_config(
             base_config=config,
             sim_config={
-                'class_name': 'Cattle_21Gen',
-                'config': cattle21gen_config
+                'class_name': 'DependentVariablePopulationSize',
+                'config': dependent_popn_config
             },
             arch_config={
                 'name': f'SUMMARY_STATS-{strategy_name}-{cache_name}',

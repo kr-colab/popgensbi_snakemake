@@ -1,7 +1,7 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "cattle_21Gen"
+project_dir: "DependentVariablePopulationSize"
 
 cpu_resources:
   runtime: "2h"
@@ -31,7 +31,7 @@ clip_max_norm: 5
 packed_sequence: False
 
 simulator:
-  class_name: "Cattle_21Gen"
+  class_name: "DependentVariablePopulationSize"
   # OPTIONAL CLASS KWARGS:
   sequence_length: 2000000
   mutation_rate: 1e-8
