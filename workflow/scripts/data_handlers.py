@@ -7,6 +7,10 @@ from torch.nn.utils.rnn import pack_sequence
 from typing import Callable
 
 
+def _pack_sorted_sequence(x):
+    return pack_sequence(x, enforce_sorted=False) 
+
+
 class ZarrDataset(Dataset):
     def __init__(
         self, 
@@ -26,8 +30,8 @@ class ZarrDataset(Dataset):
             self.theta = None
 
         # If x is ragged use a PackedSequence to collate into batches
-        self.x_collate = torch.stack if not packed_sequence else \
-            lambda x: pack_sequence(x, enforce_sorted=False) 
+        self.x_collate = \
+            torch.stack if not packed_sequence else _pack_sorted_sequence
         # TODO: rather than torch.stack, use pad_sequence so that
         # ragged arrays are handled seemlessly
 
