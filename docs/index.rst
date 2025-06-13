@@ -7,6 +7,8 @@ Welcome to PopGenSBI's documentation!
 
    installation
    usage
+   simulators
+   processors
    api
    contributing
 
