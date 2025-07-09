@@ -362,7 +362,8 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
 class SPIDNA_processor(BaseProcessor):
     default_config = {
         "maf": 0.05,
-        "relative_position": True
+        "relative_position": True,
+        "n_snps": 400
     }
 
     def __init__(self, config: dict):
@@ -392,18 +393,33 @@ class SPIDNA_processor(BaseProcessor):
             snp = snp[keep]
             pos = pos[keep]
         
-        # Take first n_samples samples and first 400 SNPs
+        # Take first n_samples samples and first n_snps SNPs
         n_samples = min(snp.shape[1], 20)  # Max 20 samples, using shape[1] since not transposed
-        snp = snp[:400, :n_samples]  # Take exactly 400 SNPs, maintain (variants, samples) shape
-        pos = pos[:400]  # Take exactly 400 positions
+        
+        # Handle case where we have fewer than n_snps SNPs
+        n_snps = snp.shape[0]
+        if n_snps < self.n_snps:
+            # Pad with -1 to reach n_snps SNPs (consistent with cnn_extract padding)
+            snp_padded = np.full((self.n_snps, n_samples), -1, dtype=snp.dtype)
+            snp_padded[:n_snps, :] = snp[:, :n_samples]
+            snp = snp_padded
+            
+            # Pad positions with -1 to indicate padding
+            pos_padded = np.full(self.n_snps, -1, dtype=pos.dtype)
+            pos_padded[:n_snps] = pos
+            pos = pos_padded
+        else:
+            # We have enough SNPs, just take the first n_snps
+            snp = snp[:self.n_snps, :n_samples]
+            pos = pos[:self.n_snps]
         
         # Create output tensor matching legacy format
-        # First create position channel (1, 400)
+        # First create position channel (1, n_snps)
         pos_channel = pos.reshape(1, -1)
         
         # Stack channels
         output_val = np.concatenate([
-            pos_channel,  # Shape: (1, 400)
+            pos_channel,  # Shape: (1, n_snps)
             snp.T        # Now transpose only at the end to match expected output format
         ])
         

@@ -15,7 +15,7 @@ gpu_resources:
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
 random_seed: 1
-n_chunk: 70 # number of jobs for parallel simulation
+n_chunk: 50 # number of instances to simulate per worker
 n_train: 10000
 n_val: 1000
 n_test: 1000
@@ -25,41 +25,40 @@ use_cache: True # load features into CPU memory
 optimizer: "Adam"
 batch_size: 32
 learning_rate: 0.0005
-max_num_epochs: 500
-stop_after_epochs: 100
+max_num_epochs: 200
+stop_after_epochs: 20
 clip_max_norm: 5
 packed_sequence: False
 
 simulator:
   class_name: "VariablePopulationSize"
   # OPTIONAL CLASS KWARGS:
-  sequence_length: 10000000  # 10Mb
+  sequence_length: 10000000
   mutation_rate: 1.5e-8
-  num_time_windows: 15  # 5 epochs with different population sizes
+  num_time_windows: 15
   max_time: 100000
   time_rate: 0.1
   samples:
-    pop: 20  # 20 samples from the population
+    pop: 20
 
 processor:
-  class_name: "cnn_extract"
+  class_name: "SPIDNA_processor"
   # OPTIONAL CLASS KWARGS:
-  n_snps: 10000
-  maf_thresh: 0.01  # Minor allele frequency threshold
-  phased: False
-  ploidy: 2
+  n_snps: 1000
+  maf: 0.0
+  relative_position: True
 
 embedding_network:
-  class_name: "ExchangeableCNN"
+  class_name: "SPIDNA_embedding_network"
   # OPTIONAL CLASS KWARGS:
   output_dim: 64
-  input_rows: [20]  # matches number of samples
-  input_cols: [2000]  # matches n_snps
+  num_block: 6
+  num_feature: 32
 
 prediction:
-  n_chunk: 50
-  vcf: "example_data/variable_popn_size/snp.vcf.gz"
-  ancestral_fasta: "example_data/variable_popn_size/anc.fa.gz"
-  population_map: "example_data/variable_popn_size/popmap.yaml" # subset of samples, with populations
-  windows: "example_data/variable_popn_size/windows.bed" # windows to predict over
-  min_snps_per_window: 100 # filter out low-density windows
+  n_chunk: 10
+  vcf: "example_data/VariablePopulationSize/snp.vcf.gz"
+  ancestral_fasta: "example_data/VariablePopulationSize/anc.fa.gz"
+  population_map: "example_data/VariablePopulationSize/popmap.yaml" # subset of samples, with populations
+  windows: "example_data/VariablePopulationSize/windows.bed" # windows to predict over
+  min_snps_per_window: 400 # filter out low-density windows
