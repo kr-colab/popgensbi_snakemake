@@ -1,0 +1,63 @@
+# --- top level arguments are ALWAYS REQUIRED --- #
+
+# change this to the project directory you want to use
+project_dir: "/sietch_colab/data_share/popgen_npe/variable_popn_size"
+
+cpu_resources:
+  runtime: "2h"
+  mem_mb: 16000
+
+gpu_resources: 
+  runtime: "4h"
+  mem_mb: 50000
+  gpus: 1
+  slurm_partition: "kerngpu,gpu"
+  slurm_extra: "--gres=gpu:1 --constraint=a100"
+
+random_seed: 1
+n_chunk: 70 # number of jobs for parallel simulation
+n_train: 10000
+n_val: 1000
+n_test: 1000
+
+train_embedding_net_separately: True # train embedding network separately from normalizing flow
+use_cache: True # load features into CPU memory
+optimizer: "Adam"
+batch_size: 32
+learning_rate: 0.0005
+max_num_epochs: 200
+stop_after_epochs: 100
+clip_max_norm: 5
+packed_sequence: True
+
+simulator:
+  class_name: "VariablePopulationSize"
+  # OPTIONAL CLASS KWARGS:
+  sequence_length: 10000000  # 10Mb
+  mutation_rate: 1.5e-8
+  num_time_windows: 15  # 5 epochs with different population sizes
+  max_time: 100000
+  time_rate: 0.1
+  samples:
+    pop: 20  # 20 samples from the population
+
+processor:
+  class_name: "genotypes_and_distances"
+  # OPTIONAL CLASS KWARGS:
+  max_snps: 10000
+  min_freq: 0.00
+  max_freq: 1.00
+
+embedding_network:
+  class_name: "RNN"
+  # OPTIONAL CLASS KWARGS:
+  input_size: 21 # num individuals + 1
+  output_size: 64
+
+prediction:
+  n_chunk: 50
+  vcf: "example_data/variable_popn_size/snp.vcf.gz"
+  ancestral_fasta: "example_data/variable_popn_size/anc.fa.gz"
+  population_map: "example_data/variable_popn_size/popmap.yaml" # subset of samples, with populations
+  windows: "example_data/variable_popn_size/windows.bed" # windows to predict over
+  min_snps_per_window: 100 # filter out low-density windows

@@ -189,9 +189,12 @@ class VariablePopulationSize(BaseSimulator):
 
     def _calculate_change_times(self) -> np.ndarray:
         """Calculate the times at which population size changes occur using an exponential spacing."""
-        times = [(np.exp(np.log(1 + self.time_rate * self.max_time) * i / 
-                        (self.num_time_windows - 1)) - 1) / self.time_rate 
-                for i in range(self.num_time_windows)]
+        #times = [(np.exp(np.log(1 + self.time_rate * self.max_time) * i / 
+        #                (self.num_time_windows - 1)) - 1) / self.time_rate 
+        #        for i in range(self.num_time_windows)]
+        win = np.logspace(2, np.log10(self.max_time), self.num_time_windows)
+        win[0] = 0
+        times = win
         return np.around(times).astype(int)
 
     def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
