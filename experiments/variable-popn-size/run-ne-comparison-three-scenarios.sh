@@ -4,8 +4,8 @@
 # 2. Linear decline  
 # 3. Linear growth
 
-# Navigate to the posterior analysis directory
-cd /home/adkern/popgensbi_snakemake/tools/posterior_analysis
+# Navigate to the experiments directory (scripts are now here)
+cd /home/adkern/popgensbi_snakemake/experiments/variable-popn-size
 
 # Create output directory
 OUTPUT_DIR="ne_comparison_three_scenarios"
@@ -18,9 +18,9 @@ SIM_SEED=42
 ANALYSIS_SEED=666
 
 # Configuration files
-CNN_CONFIG="../../experiments/variable-popn-size/npe-config/variable_popn_size_cnn.yaml"
-RNN_CONFIG="../../experiments/variable-popn-size/npe-config/variable_popn_size_rnn.yaml"
-SPIDNA_CONFIG="../../experiments/variable-popn-size/npe-config/variable_popn_size_spidna.yaml"
+CNN_CONFIG="npe-config/variable_popn_size_cnn.yaml"
+RNN_CONFIG="npe-config/variable_popn_size_rnn.yaml"
+SPIDNA_CONFIG="npe-config/variable_popn_size_spidna.yaml"
 
 echo "=== Using compare-analysis.py for each scenario (this works!) ==="
 

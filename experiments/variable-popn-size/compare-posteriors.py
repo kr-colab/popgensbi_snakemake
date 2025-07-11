@@ -17,7 +17,6 @@ import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
-import hashlib
 from pathlib import Path
 
 from torch import Tensor
@@ -252,8 +251,6 @@ Examples:
         simulator = getattr(ts_simulators, simulator_config["class_name"])(
             simulator_config
         )
-        prior_low = simulator.prior.base_dist.low.numpy()
-        prior_high = simulator.prior.base_dist.high.numpy()
 
         # Set label
         if args.labels:
@@ -283,7 +280,6 @@ Examples:
             .numpy()
         )
 
-
         # Store results
         model_data["posterior_samples"] = posterior_samples
         model_data["posterior_mean"] = posterior_samples.mean(axis=0)
@@ -311,8 +307,8 @@ Examples:
     for i, model in enumerate(models):
         # Use mean of log10 values, then convert to linear for plotting
         posterior_mean_log10 = np.mean(model["posterior_samples"][:, :-1], axis=0)
-        posterior_mean_pop_sizes = 10 ** posterior_mean_log10
-        
+        posterior_mean_pop_sizes = 10**posterior_mean_log10
+
         # Get population sizes in linear scale for credible intervals
         posterior_pop_sizes = 10 ** model["posterior_samples"][:, :-1]
 
@@ -432,7 +428,7 @@ Examples:
     for model in models:
         # Use mean of log10 values, then convert to linear
         posterior_mean_log10 = np.mean(model["posterior_samples"][:, :-1], axis=0)
-        posterior_mean_pop_sizes = 10 ** posterior_mean_log10
+        posterior_mean_pop_sizes = 10**posterior_mean_log10
 
         # Mean relative error for population sizes
         mre = np.mean(
