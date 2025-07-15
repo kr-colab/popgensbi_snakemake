@@ -350,3 +350,25 @@ class ReLERNN(nn.Module):
         
         # Final embedding extraction
         return self.feature_ext(catout)  # (batch, output_size)
+
+
+class LinearEmbedding(nn.Module):
+    """
+    Embed features with a linear layer, optionally with additional blocks
+    consisting of activation+dropout+linear
+    """
+
+    def __init__(self, *, input_dim, output_dim, num_blocks=0, dropout=0.0):
+        super().__init__()
+        layers = [nn.Linear(input_dim, output_dim)]
+        for _ in range(num_blocks):
+            layers.append(nn.ELU())
+            layers.append(nn.Dropout(dropout))
+            layers.append(nn.Linear(output_dim, output_dim))
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        # Ensure input is a torch tensor and flatten if needed
+        if not isinstance(x, torch.Tensor):
+            x = torch.from_numpy(x).float()
+        return self.layers(x.reshape(x.shape[0], -1))

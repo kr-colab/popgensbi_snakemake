@@ -1,6 +1,7 @@
 import dinf
 import tskit
 import torch
+import moments
 import numpy as np
 import allel
 import pandas as pd
@@ -147,6 +148,7 @@ class tskit_sfs(BaseProcessor):
         "polarised": False,
         "normalised": True,
         "log1p": False,
+        "project_to": None,
     }
 
     def __init__(self, config: dict):
@@ -186,6 +188,10 @@ class tskit_sfs(BaseProcessor):
             span_normalise=self.span_normalise,
             polarised=self.polarised
         )
+        if self.project_to is not None:
+            assert isinstance(self.project_to, list)
+            assert len(self.project_to) == len(sample_sets)
+            sfs = np.array(moments.Spectrum(sfs).project(self.project_to))
         if self.normalised:
             sfs /= np.sum(sfs)
         if self.log1p:

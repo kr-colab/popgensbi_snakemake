@@ -1,10 +1,12 @@
+set -e 
+
 PWD=`realpath "$0"`
 PWD=`dirname $PWD`
 
 # train NPE models
 for CONFIG in $PWD/npe-config/*.yaml; do
-  snakemake --configfile $CONFIG \
-    --snakefile $PWD/../../workflow/training-workflow.smk
+  snakemake --configfile $CONFIG --jobs 50 \
+    --snakefile $PWD/../../workflow/training_workflow.smk
 done
 
 # coverage experiment and figures

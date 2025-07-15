@@ -54,6 +54,13 @@ class YRI_CEU(BaseSimulator):
         theta = self.prior.sample().numpy()
         N_A, N_YRI, N_CEU_initial, N_CEU_final, M, Tp, T = theta
 
+        if isinstance(self.recombination_rate, list):
+            assert len(self.recombination_rate) == 2
+            rec_rate = np.random.default_rng(seed).uniform(*self.recombination_rate)
+        else:
+            assert isinstance(self.recombination_rate, float)
+            rec_rate = self.recombination_rate
+
         graph = demes.Builder()
         graph.add_deme(
             "ancestral", 
@@ -81,7 +88,115 @@ class YRI_CEU(BaseSimulator):
             self.samples,
             demography=demog,
             sequence_length=self.sequence_length,
-            recombination_rate=self.recombination_rate,
+            recombination_rate=rec_rate,
+            random_seed=seed,
+        )
+        ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
+
+        return ts, theta
+
+
+class OutOfAfrica_2T12(BaseSimulator):
+    """
+    Simulate from the eponoymous stdpopsim model, which models the divergence
+    and subsequent expansion of European and African "populations" 
+    """
+
+    default_config = {
+        # FIXED PARAMETERS
+        "samples": {"AFR": 10, "EUR": 10},
+        "sequence_length": 10e6,
+        "recombination_rate": 1e-8,
+        "mutation_rate": 2.36e-8,
+        # RANDOM PARAMETERS (UNIFORM)
+        "N_A": [2, 5],       # log10 scale
+        "N_AF1": [2, 5],     # "
+        "N_AF": [2, 5],      # "
+        "N_B": [2, 5],       # "
+        "N_EU0": [2, 5],     # "
+        "N_EU1": [2, 5],     # "
+        "N_EU": [2, 5],      # "
+        "D_AF": [2, 5],      # "
+        "D_B": [2, 5],       # "
+        "D_EGR": [2, 5],     # "
+        "D_GR": [2, 5],      # "
+        "m_AF_B": [-8, -3],  # "
+        "m_AF_EU": [-8, -3], # "
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+        self.parameters = [
+            "N_A", "N_AF1", "N_AF", "N_B", "N_EU0", "N_EU1", "N_EU",  # population sizes
+            "D_AF", "D_B", "D_EGR", "D_GR",  # duration b/w events
+            "m_AF_B", "m_AF_EU",  # migration rates
+        ]
+        self.prior = BoxUniform(
+            low=torch.tensor([getattr(self, p)[0] for p in self.parameters]), 
+            high=torch.tensor([getattr(self, p)[1] for p in self.parameters]), 
+        )
+
+    def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
+
+        torch.manual_seed(seed)
+        theta = self.prior.sample().numpy()
+
+        # theta is in log10 space
+        N_A, N_AF1, N_AF, N_B, N_EU0, N_EU1, N_EU, \
+            D_AF, D_B, D_EGR, D_GR, m_AF_B, m_AF_EU = (10 ** theta)
+
+        # parameterization in terms of population size, duration
+        T_EG = D_GR
+        T_EU0 = T_EG + D_EGR
+        T_OOA = T_EU0 + D_B
+        T_AF = T_OOA + D_AF
+        r_EU0 = np.log(N_EU1 / N_EU0) / (T_EU0 - T_EG)
+        r_EU = np.log(N_EU / N_EU1) / T_EG
+        r_AF = np.log(N_AF / N_AF1) / T_EG
+
+        demog = msprime.Demography()
+
+        # contemporary period with growth in both populations
+        demog.add_population(name="AFR", initial_size=N_AF, growth_rate=r_AF)
+        demog.add_population(name="EUR", initial_size=N_EU, growth_rate=r_EU)
+        demog.migration_matrix = np.array([[0.0, m_AF_EU], [m_AF_EU, 0.0]])
+
+        # pre-contemporary period with growth only in European population
+        demog.add_migration_rate_change(time=T_EG, rate=m_AF_EU, source=0, dest=1)
+        demog.add_migration_rate_change(time=T_EG, rate=m_AF_EU, source=1, dest=0)
+        demog.add_population_parameters_change(
+            time=T_EG, population=1, growth_rate=r_EU0, initial_size=N_EU1,
+        )
+        demog.add_population_parameters_change(
+            time=T_EG, population=0, growth_rate=0.0, initial_size=N_AF1,
+        )
+
+        # bottleneck "B" population to which European lineages move
+        demog.add_migration_rate_change(time=T_EU0, rate=m_AF_B, source=0, dest=1)
+        demog.add_migration_rate_change(time=T_EU0, rate=m_AF_B, source=1, dest=0)
+        demog.add_population_parameters_change(
+            time=T_EU0, population=1, initial_size=N_B, growth_rate=0.0,
+        )
+
+        # out of Africa event
+        demog.add_mass_migration(time=T_OOA, source=1, dest=0, proportion=1.0)
+        demog.add_migration_rate_change(time=T_OOA, rate=0.0)
+
+        # change to ancestral size
+        demog.add_population_parameters_change(time=T_AF, population=0, initial_size=N_A)
+
+        if isinstance(self.recombination_rate, list):
+            assert len(self.recombination_rate) == 2
+            rec_rate = np.random.default_rng(seed).uniform(*self.recombination_rate)
+        else:
+            assert isinstance(self.recombination_rate, float)
+            rec_rate = self.recombination_rate
+
+        ts = msprime.sim_ancestry(
+            self.samples,
+            demography=demog,
+            sequence_length=self.sequence_length,
+            recombination_rate=rec_rate,
             random_seed=seed,
         )
         ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
