@@ -16,7 +16,7 @@ gpu_resources:
 
 random_seed: 1
 n_chunk: 70 # number of jobs for parallel simulation
-n_train: 10000
+n_train: 40000
 n_val: 1000
 n_test: 1000
 

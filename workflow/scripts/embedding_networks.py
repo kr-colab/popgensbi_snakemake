@@ -29,6 +29,19 @@ class RNN(nn.Module):
         return self.mlp(hn)
 
 
+class FrozenLayerNorm(nn.Module):
+    """ 
+    Layer norm without learnable weights, that can be applied to tensors
+    of variable sizes. The batch dimension is assumed to be the first, so
+    that mean/variance are calculated over the remaining dimensions.
+    """
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x): 
+        return F.layer_norm(x, x.shape[1:])
+
+
 # TODO: SBI has a built-in exchangeable layer, why not use this?
 class SymmetricLayer(nn.Module):
     """
@@ -123,9 +136,7 @@ class ExchangeableCNN(nn.Module):
             )
         )
         cnn_layers.append(self.activation())
-        cnn_layers.append(
-            nn.BatchNorm2d(num_features=self.outchannels1, track_running_stats=False)
-        )
+        cnn_layers.append(FrozenLayerNorm())
         cnn_layers.append(
             nn.Conv2d(
                 self.outchannels1,
@@ -135,9 +146,7 @@ class ExchangeableCNN(nn.Module):
             )
         )
         cnn_layers.append(self.activation())
-        cnn_layers.append(
-            nn.BatchNorm2d(num_features=self.outchannels2, track_running_stats=False)
-        )
+        cnn_layers.append(FrozenLayerNorm())
 
         self.cnn = nn.Sequential(*cnn_layers)
         self.symmetric = SymmetricLayer(axis=2, func=symmetric_func)

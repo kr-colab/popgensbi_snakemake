@@ -54,7 +54,7 @@ embedding_network:
   # OPTIONAL CLASS KWARGS:
   output_dim: 64
   input_rows: [20]  # matches number of samples
-  input_cols: [2000]  # matches n_snps
+  input_cols: [10000]  # matches n_snps
 
 prediction:
   n_chunk: 50
