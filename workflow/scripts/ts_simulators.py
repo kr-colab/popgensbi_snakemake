@@ -160,7 +160,7 @@ class VariablePopulationSize(BaseSimulator):
         "num_time_windows": 3,
         # RANDOM PARAMETERS (UNIFORM)
         "pop_sizes": [1e2, 1e5],      # Range for population sizes (log10 space)
-        "recomb_rate": [1e-9, 1e-7],  # Range for recombination rate
+        "recomb_rate": [1e-9, 2e-8],  # Range for recombination rate
         # TIME PARAMETERS
         "max_time": 100000,  # Maximum time for population events
         "time_rate": 0.1,    # Rate at which time changes across windows

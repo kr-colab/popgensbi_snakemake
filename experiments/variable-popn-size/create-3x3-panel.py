@@ -23,14 +23,14 @@ def plot_step_function(times, sizes, ax, label=None, color=None, alpha=1.0, line
 
 
 def create_ribbon_plot(ax, posterior_samples, true_pop_sizes, change_times, color='blue', 
-                       title=None, show_legend=True, ylim=None):
+                       title=None, show_legend=True, ylim=(1e2, 1e5)):
     """Create a ribbon plot for a single model on the given axis."""
     # Extract population sizes from posterior samples
     posterior_pop_sizes = 10 ** posterior_samples[:, :-1]
     
     # Times for step plots
     times_with_one = np.concatenate([[1], np.array(change_times), [100000]])
-    
+
     # Compute quantiles for each epoch
     lower_95 = np.percentile(posterior_pop_sizes, 2.5, axis=0)
     upper_95 = np.percentile(posterior_pop_sizes, 97.5, axis=0)
@@ -67,7 +67,7 @@ def create_ribbon_plot(ax, posterior_samples, true_pop_sizes, change_times, colo
                       label="True" if show_legend else None, color="black", linewidth=3)
     
     # Styling
-    ax.set_xlim(1, max(change_times) * 1.2)
+    ax.set_xlim(100, max(change_times) * 1.2)
     if ylim:
         ax.set_ylim(ylim)
     ax.set_xscale("log")
@@ -75,10 +75,10 @@ def create_ribbon_plot(ax, posterior_samples, true_pop_sizes, change_times, colo
     ax.grid(True, alpha=0.3)
     
     if title:
-        ax.set_title(title, fontsize=14)
+        ax.set_title(title, fontsize=20)
     
     if show_legend:
-        ax.legend(loc='best')
+        ax.legend(loc='best', fontsize=15, frameon=True)
 
 
 def main():
@@ -142,8 +142,8 @@ def main():
         axes = axes.reshape(-1, 1)
     
     # Define colors
-    colors = plt.cm.tab10(np.linspace(0, 1, n_models))
-    
+    colors = plt.cm.Accent(np.linspace(0, 1, n_models))
+
     # Plot each scenario and model
     for scenario_idx, results in enumerate(all_results):
         true_params = results["true_params"]
@@ -165,16 +165,21 @@ def main():
                 color=colors[model_idx],
                 title=None,
                 show_legend=(scenario_idx == 0 and model_idx == 0),
-                ylim=(5e1, 5e5)
+                ylim=(1e2, 1e5)
             )
             
             # Add labels
             if scenario_idx == 0:
-                ax.set_title(model_data["label"], fontsize=14)
-            if model_idx == 0:
-                ax.set_ylabel(f"{args.scenario_labels[scenario_idx]}\n\nPopulation size", fontsize=12)
-            if scenario_idx == n_scenarios - 1:
-                ax.set_xlabel("Time (generations ago)", fontsize=12)
+                ax.set_title(model_data["label"], fontsize=18)
+    
+    # Add superlabels
+    fig.supylabel("Population size", fontsize=20)
+    fig.supxlabel("Generations ago", fontsize=20)
+    
+    # Add scenario labels on the right
+    for i, scenario_label in enumerate(args.scenario_labels):
+        axes[i, n_models-1].yaxis.set_label_position("right")
+        axes[i, n_models-1].set_ylabel(scenario_label, rotation=270, va="center", fontsize=18, labelpad=20)
     
     plt.savefig(args.output, dpi=150, bbox_inches='tight')
     print(f"Panel plot saved to: {args.output}")
