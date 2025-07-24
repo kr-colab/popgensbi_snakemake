@@ -22,7 +22,8 @@ class genotypes_and_distances(BaseProcessor):
 
     default_config = {
         "max_snps": 2000,
-        "maf_thresh": 0.0,
+        "min_freq": 0.0,
+        "max_freq": 1.0,
         "polarised": True,
         "phased": False,
         "position_scaling": 1e3,
@@ -35,8 +36,8 @@ class genotypes_and_distances(BaseProcessor):
         geno = ts.genotype_matrix()
         freq = geno.sum(axis=1) / geno.shape[1]
         keep = np.logical_and(
-            freq >= self.maf_thresh,
-            freq <= 1 - self.maf_thresh,
+            freq >= self.min_freq,
+            freq <= self.max_freq,
         )
         if not self.polarised: 
             geno[freq > 0.5] = 1 - geno[freq > 0.5]
