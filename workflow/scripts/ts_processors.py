@@ -9,6 +9,8 @@ from dinf.misc import ts_individuals
 
 class BaseProcessor:
     def __init__(self, config: dict, default: dict):
+        for key in config:
+            assert key in default, f"Option {key} not available for processor"
         for key, default in default.items():
             setattr(self, key, config.get(key, default))
 
@@ -20,9 +22,9 @@ class genotypes_and_distances(BaseProcessor):
 
     default_config = {
         "max_snps": 2000,
+        "maf_thresh": 0.0,
+        "polarised": True,
         "phased": False,
-        "min_freq": 0.0,
-        "max_freq": 1.0,
         "position_scaling": 1e3,
     }
 
@@ -33,14 +35,16 @@ class genotypes_and_distances(BaseProcessor):
         geno = ts.genotype_matrix()
         freq = geno.sum(axis=1) / geno.shape[1]
         keep = np.logical_and(
-            freq >= self.min_freq,
-            freq <= self.max_freq,
+            freq >= self.maf_thresh,
+            freq <= 1 - self.maf_thresh,
         )
+        if not self.polarised: 
+            geno[freq > 0.5] = 1 - geno[freq > 0.5]
         if not self.phased:
-            diploid_map = np.zeros((ts.num_samples, ts.num_individuals))
+            individual_map = np.zeros((ts.num_samples, ts.num_individuals))
             for i, ind in enumerate(ts.individuals()):
-                diploid_map[ind.nodes, i] = 1.0
-            geno = geno @ diploid_map
+                individual_map[ind.nodes, i] = 1.0
+            geno = geno @ individual_map
         pos = (
             np.append(ts.sites_position[0], np.diff(ts.sites_position))
             / self.position_scaling
@@ -55,18 +59,24 @@ class genotypes_and_distances(BaseProcessor):
         return geno
 
 
-# TODO: something seems to be going wrong here if pops have different sizes
-# Not convinced the padding is working as intended
+# FIXME: bug if pops have different sizes?
 class cnn_extract(BaseProcessor):
     """
     Extract genotype matrices from tree sequences using dinf's feature extractor.
     Handles both single and multiple population cases automatically.
     """
 
-    default_config = {"n_snps": 500, "ploidy": 2, "phased": False, "maf_thresh": 0.05}
+    default_config = {
+        "n_snps": 500,  # extract at most this many SNPs
+        "phased": False,  # if False use diploid genotypes
+        "maf_thresh": 0.05,  # use SNPs with at least this minor allele frequecny
+        "polarised": False,  # if False then polarise so that the minor allele is derived
+    }
 
     def __init__(self, config: dict):
         super().__init__(config, self.default_config)
+        if self.polarised: 
+            raise ValueError("Polarised features not implemented")
 
     def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
         # Get population names and corresponding sampled individuals
@@ -74,21 +84,14 @@ class cnn_extract(BaseProcessor):
         sampled_pop_names = [
             pop for pop in pop_names if len(ts_individuals(ts, pop)) > 0
         ]
+        ploidy = ts.individual(0).nodes.size
 
         if len(sampled_pop_names) == 1:
             # Single population case
-            if self.ploidy == 2:
-                if not self.phased:
-                    n_sample = int(ts.num_samples / self.ploidy)
-                else:
-                    n_sample = ts.num_samples
-            elif self.ploidy == 1:
-                n_sample = ts.num_samples
-
             extractor = dinf.feature_extractor.HaplotypeMatrix(
-                num_individuals=n_sample,
+                num_individuals=ts.num_individuals,
                 num_loci=self.n_snps,
-                ploidy=self.ploidy,
+                ploidy=ploidy,
                 phased=self.phased,
                 maf_thresh=self.maf_thresh,
             )
@@ -102,15 +105,14 @@ class cnn_extract(BaseProcessor):
                 name: len(individuals[name]) for name in sampled_pop_names
             }
 
+            # Get feature matrices for each population
             extractor = dinf.feature_extractor.MultipleHaplotypeMatrices(
                 num_individuals=num_individuals,
                 num_loci={pop: self.n_snps for pop in sampled_pop_names},
-                ploidy={pop: self.ploidy for pop in sampled_pop_names},
+                ploidy={pop: ploidy for pop in sampled_pop_names},
                 global_phased=self.phased,
                 global_maf_thresh=self.maf_thresh,
             )
-
-            # Get feature matrices for each population
             feature_matrices = extractor.from_ts(ts, individuals=individuals)
 
             # Pad matrices if populations have different sizes
@@ -126,9 +128,9 @@ class cnn_extract(BaseProcessor):
                         -1,
                     )
 
-            output_mat = torch.stack([v for v in feature_matrices.values()]).permute(
-                0, 3, 1, 2
-            )
+            output_mat = torch.stack(
+                [v for v in feature_matrices.values()]
+            ).permute(0, 3, 1, 2)
             # Output tensor shape:
             # - Multiple pops: (# populations, # channels, # individuals, # snps)
             # - Channels are positions and genotypes
@@ -157,33 +159,9 @@ class tskit_sfs(BaseProcessor):
         super().__init__(config, self.default_config)
 
     def __call__(self, ts: tskit.TreeSequence) -> torch.Tensor:
-        # Get number of populations with samples
         sampled_pops = [
             i for i in range(ts.num_populations) if len(ts.samples(population=i)) > 0
         ]
-
-        # if len(sampled_pops) == 1:
-        #    # Single population case
-        #    sfs = ts.allele_frequency_spectrum(
-        #        sample_sets=[ts.samples(population=sampled_pops[0])],
-        #        windows=self.windows,
-        #        mode=self.mode,
-        #        span_normalise=self.span_normalise,
-        #        polarised=self.polarised
-        #    )
-        #    sfs = sfs / np.sum(sfs)
-        # else:
-        #    # Multiple populations case
-        #    sample_sets = [ts.samples(population=i) for i in sampled_pops]
-        #    sfs = ts.allele_frequency_spectrum(
-        #        sample_sets=sample_sets,
-        #        windows=self.windows,
-        #        mode=self.mode,
-        #        span_normalise=self.span_normalise,
-        #        polarised=self.polarised
-        #    )
-        #    sfs = sfs / np.sum(sfs)
-
         sample_sets = [ts.samples(population=i) for i in sampled_pops]
         sfs = ts.allele_frequency_spectrum(
             sample_sets=sample_sets,
@@ -196,8 +174,131 @@ class tskit_sfs(BaseProcessor):
             sfs /= np.sum(sfs)
         if self.log1p:
             sfs = np.log1p(sfs)
-
         return sfs
+
+
+class SPIDNA_processor(BaseProcessor):
+
+    default_config = {
+        "maf": 0.05, 
+        "relative_position": True, 
+        "n_snps": 400,
+        "polarised": True,
+        "phased": True,
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+
+    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
+        # Extract genotype matrix and positions
+        snp = ts.genotype_matrix()  # Shape: (n_variants, n_samples)
+        pos = ts.sites_position
+
+        # Handle relative positions
+        if self.relative_position:
+            abs_pos = np.array(pos)
+            pos = abs_pos - np.concatenate(([0], abs_pos[:-1]))
+        pos = pos / ts.sequence_length  # Normalize positions to [0, 1] range
+
+        # MAF filtering
+        if self.maf != 0:
+            num_sample = ts.num_samples
+            row_sum = np.sum(
+                snp, axis=1
+            )  # Sum along rows since matrix isn't transposed
+            keep = np.logical_and.reduce(
+                [
+                    row_sum != 0,
+                    row_sum != num_sample,
+                    row_sum > num_sample * self.maf,
+                    num_sample - row_sum > num_sample * self.maf,
+                ]
+            )
+            snp = snp[keep]
+            pos = pos[keep]
+
+        if not self.polarised: 
+            freq = snp.sum(axis=1) / snp.shape[1]
+            snp[freq > 0.5] = 1 - snp[freq > 0.5]
+
+        if not self.phased:
+            individual_map = np.zeros((ts.num_samples, ts.num_individuals))
+            for i, ind in enumerate(ts.individuals()):
+                individual_map[ind.nodes, i] = 1.0
+            snp = snp @ individual_map
+
+        # Handle case where we have fewer than n_snps SNPs
+        n_samples = snp.shape[1]
+        n_snps = snp.shape[0]
+        if n_snps < self.n_snps:
+            # Pad with -1 to reach n_snps SNPs (consistent with cnn_extract padding)
+            snp_padded = np.full((self.n_snps, n_samples), -1, dtype=snp.dtype)
+            snp_padded[:n_snps, :] = snp[:, :n_samples]
+            snp = snp_padded
+
+            # Pad positions with -1 to indicate padding
+            pos_padded = np.full(self.n_snps, -1, dtype=pos.dtype)
+            pos_padded[:n_snps] = pos
+            pos = pos_padded
+        else:
+            # We have enough SNPs, just take the first n_snps
+            snp = snp[:self.n_snps, :n_samples]
+            pos = pos[:self.n_snps]
+
+        # Create output tensor matching legacy format
+        # First create position channel (1, n_snps)
+        pos_channel = pos.reshape(1, -1)
+
+        # Stack channels
+        output_val = np.concatenate(
+            [
+                pos_channel,  # Shape: (1, n_snps)
+                snp.T,  # Now transpose only at the end to match expected output format
+            ]
+        )
+
+        return output_val.astype(np.float32)
+
+
+class ReLERNN_processor(BaseProcessor):
+
+    default_config = {
+        "n_snps": 2000,
+        "min_freq": 0.0,
+        "max_freq": 1.0,
+        "phased": True,
+        "polarised": True,
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+        if not self.phased: 
+            raise ValueError("Unphased features not implemented")
+
+    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
+        geno = ts.genotype_matrix()
+        freq = geno.sum(axis=1) / geno.shape[1]
+        keep = np.logical_and(
+            freq >= self.min_freq,
+            freq <= self.max_freq,
+        )
+        if not self.polarised:
+            geno[freq > 0.5] = 1 - geno[freq > 0.5]
+        geno = geno * 2 - 1  # recode ancestral to -1, derived to 1
+        pos = ts.sites_position / ts.sequence_length
+        geno = np.concatenate([pos.reshape(ts.num_sites, -1), geno], axis=-1)
+        # filter SNPs
+        geno = geno[keep]
+        geno = geno[:self.n_snps]
+        # Pad with zeros if the number of rows is less than max_snps
+        if geno.shape[0] < self.n_snps:
+            pad_rows = self.n_snps - geno.shape[0]
+            geno = np.pad(
+                geno, ((0, pad_rows), (0, 0)), mode="constant", constant_values=0
+            )
+
+        return geno
 
 
 class tskit_windowed_sfs_plus_ld(BaseProcessor):
@@ -388,110 +489,3 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
         mean_afs_values = np.stack(afs_stats).mean(axis=0)[1:-1]
         sum_stats = np.concatenate((mean_r2_values, mean_afs_values))
         return sum_stats
-
-
-class SPIDNA_processor(BaseProcessor):
-    default_config = {"maf": 0.05, "relative_position": True, "n_snps": 400}
-
-    def __init__(self, config: dict):
-        super().__init__(config, self.default_config)
-
-    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
-        # Extract genotype matrix and positions
-        snp = ts.genotype_matrix()  # Shape: (n_variants, n_samples)
-        pos = ts.sites_position
-
-        # Handle relative positions
-        if self.relative_position:
-            abs_pos = np.array(pos)
-            pos = abs_pos - np.concatenate(([0], abs_pos[:-1]))
-            pos = pos / ts.sequence_length  # Normalize to [0, 1] range
-
-        pos = pos / ts.sequence_length  # Normalize positions to [0, 1] range
-        # MAF filtering
-        if self.maf != 0:
-            num_sample = ts.num_samples
-            row_sum = np.sum(
-                snp, axis=1
-            )  # Sum along rows since matrix isn't transposed
-            keep = np.logical_and.reduce(
-                [
-                    row_sum != 0,
-                    row_sum != num_sample,
-                    row_sum > num_sample * self.maf,
-                    num_sample - row_sum > num_sample * self.maf,
-                ]
-            )
-
-            snp = snp[keep]
-            pos = pos[keep]
-
-        # Take first n_samples samples and first n_snps SNPs
-        # n_samples = min(snp.shape[1], 20)  # Max 20 samples, using shape[1] since not transposed
-        n_samples = snp.shape[1]
-        # Handle case where we have fewer than n_snps SNPs
-        n_snps = snp.shape[0]
-        if n_snps < self.n_snps:
-            # Pad with -1 to reach n_snps SNPs (consistent with cnn_extract padding)
-            snp_padded = np.full((self.n_snps, n_samples), -1, dtype=snp.dtype)
-            snp_padded[:n_snps, :] = snp[:, :n_samples]
-            snp = snp_padded
-
-            # Pad positions with -1 to indicate padding
-            pos_padded = np.full(self.n_snps, -1, dtype=pos.dtype)
-            pos_padded[:n_snps] = pos
-            pos = pos_padded
-        else:
-            # We have enough SNPs, just take the first n_snps
-            snp = snp[: self.n_snps, :n_samples]
-            pos = pos[: self.n_snps]
-
-        # Create output tensor matching legacy format
-        # First create position channel (1, n_snps)
-        pos_channel = pos.reshape(1, -1)
-
-        # Stack channels
-        output_val = np.concatenate(
-            [
-                pos_channel,  # Shape: (1, n_snps)
-                snp.T,  # Now transpose only at the end to match expected output format
-            ]
-        )
-
-        return output_val.astype(np.float32)
-
-
-class ReLERNN_processor(BaseProcessor):
-
-    default_config = {
-        "n_snps": 2000,
-        "phased": False,
-        "min_freq": 0.0,
-        "max_freq": 1.0,
-    }
-
-    def __init__(self, config: dict):
-        super().__init__(config, self.default_config)
-
-    def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
-        geno = ts.genotype_matrix()
-        freq = geno.sum(axis=1) / geno.shape[1]
-        keep = np.logical_and(
-            freq >= self.min_freq,
-            freq <= self.max_freq,
-        )
-        assert self.phased, "ReLERNN processor requires phased genotypes"
-        geno = geno * 2 - 1  # recode ancestral to -1, derived to 1
-        pos = ts.sites_position / ts.sequence_length
-        geno = np.concatenate([pos.reshape(ts.num_sites, -1), geno], axis=-1)
-        # filter SNPs
-        geno = geno[keep]
-        geno = geno[: self.n_snps]
-        # Pad with zeros if the number of rows is less than max_snps
-        if geno.shape[0] < self.n_snps:
-            pad_rows = self.n_snps - geno.shape[0]
-            geno = np.pad(
-                geno, ((0, pad_rows), (0, 0)), mode="constant", constant_values=0
-            )
-
-        return geno
