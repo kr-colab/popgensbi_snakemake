@@ -31,7 +31,7 @@ VCF_DIR = os.path.join(PROJECT_DIR, VCF_PREFIX)
 TENSOR_DIR = os.path.join(VCF_DIR, "tensors")
 TREE_DIR = os.path.join(VCF_DIR, "trees")
 PLOT_DIR = os.path.join(VCF_DIR, "plots")
-SIM_ZARR = os.path.join(PROJECT_DIR, "tensors","zarr")
+SIM_ZARR = os.path.join(PROJECT_DIR, "tensors", "zarr")
 
 # Divvy up windows into chunks
 N_CHUNK = config["prediction"].get("n_chunk")

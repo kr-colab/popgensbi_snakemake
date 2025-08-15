@@ -1,0 +1,3 @@
+debug/
+cache*.npy
+*.log

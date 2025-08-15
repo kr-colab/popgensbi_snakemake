@@ -10,6 +10,7 @@ from dinf.misc import ts_individuals
 class BaseProcessor:
     def __init__(self, config: dict, default: dict):
         for key in config:
+            if key == "class_name": continue
             assert key in default, f"Option {key} not available for processor"
         for key, default in default.items():
             setattr(self, key, config.get(key, default))
