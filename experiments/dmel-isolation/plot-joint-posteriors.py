@@ -176,14 +176,41 @@ else:
     rescaled_params = np.load(par_cache)
 
 
-# change units, convert FR size to end size and growth rate
+# dump posterior means, medians, etc in logspace and in natural units
+flat_rescaled_params = rescaled_params.reshape(-1, rescaled_params.shape[-1])
+quantiles = [0.025, 0.25, 0.5, 0.75, 0.975]
+labels = ["N_ANC", "N_CO", "N_FR_PRE", "N_FR_POST", "T_SPLIT", "M_CO_FR", "M_FR_CO"]
+
+post_means = flat_rescaled_params.mean(axis=0)
+post_quantiles = np.quantile(flat_rescaled_params, quantiles, axis=0).T
+summary_csv = open(f"{args.output_prefix}posterior-summary-log10.csv", "w")
+summary_csv.write("parameter,post_mean,")
+for q in quantiles: summary_csv.write(f"post_quant_{q},")
+summary_csv.write("\n")
+for i, nm in enumerate(labels):
+    summary_csv.write(f"{nm},{post_means[i]},")
+    for q in post_quantiles[i]:
+        summary_csv.write(f"{q},")
+    summary_csv.write("\n")
+summary_csv.close()
+
+post_means = (10 ** flat_rescaled_params).mean(axis=0)
+post_quantiles = np.quantile(10 ** flat_rescaled_params, quantiles, axis=0).T
+summary_csv = open(f"{args.output_prefix}posterior-summary.csv", "w")
+summary_csv.write("parameter,post_mean,")
+for q in quantiles: summary_csv.write(f"post_quant_{q},")
+summary_csv.write("\n")
+for i, nm in enumerate(labels):
+    summary_csv.write(f"{nm},{post_means[i]},")
+    for q in post_quantiles[i]:
+        summary_csv.write(f"{q},")
+    summary_csv.write("\n")
+summary_csv.close()
+
+
+# subsample for plots
 n_samp = 100 # samples per window
 rescaled_params = 10 ** rescaled_params[:, :n_samp, :]
-#N_FR0 = rescaled_params[..., 2].copy()
-#N_FR1 = rescaled_params[..., 3].copy()
-#rescaled_params[..., 3] = np.log(N_FR1 / N_FR0) / rescaled_params[..., 4]  * 1000
-#rescaled_params[..., 2] = N_FR1
-
 
 # plot
 import matplotlib.pyplot as plt
