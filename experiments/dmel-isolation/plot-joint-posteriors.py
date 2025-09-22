@@ -4,6 +4,7 @@ import numpy as np
 import tskit
 import yaml
 import ray
+import scipy.stats
 import argparse
 
 parser = argparse.ArgumentParser("Plot posteriors after rescaling parameters by fitting theta analytically")
@@ -240,6 +241,39 @@ for i, nm in enumerate(pretty_labels):
     summary_tex.write("\n")
 summary_tex.write(r"\end{tabular}" + "\n")
 summary_tex.close()
+
+# pairwise correlation coefficients
+pairwise_csv = open(f"{args.output_prefix}posterior-pairwise-summary.csv", "w")
+pairwise_csv.write("param1,param2,global_spearman_r,global_pearson_r,avg_spearman_r,avg_pearson_r\n")
+for i, nm1 in enumerate(labels):
+    for j, nm2 in enumerate(labels):
+        if j > i:
+            sp_r_w = []
+            pe_r_w = []
+            for w in range(rescaled_params.shape[0]):
+                sp_r_w.append(scipy.stats.spearmanr(
+                    rescaled_params[w, :, i].flatten(),
+                    rescaled_params[w, :, j].flatten(),
+                ).statistic)
+                pe_r_w.append(scipy.stats.pearsonr(
+                    rescaled_params[w, :, i].flatten(),
+                    rescaled_params[w, :, j].flatten(),
+                ).statistic)
+            sp_r_w = np.mean(sp_r_w)
+            pe_r_w = np.mean(pe_r_w)
+            sp_r = scipy.stats.spearmanr(
+                rescaled_params[:, :, i].flatten(),
+                rescaled_params[:, :, j].flatten(),
+            ).statistic
+            pe_r = scipy.stats.pearsonr(
+                rescaled_params[:, :, i].flatten(),
+                rescaled_params[:, :, j].flatten(),
+            ).statistic
+            pairwise_csv.write(f"{nm1},{nm2},{sp_r:.3f},{pe_r:.3f},{sp_r_w:.3f},{pe_r_w:.3f}\n")
+pairwise_csv.close()
+
+
+
 
 
 # subsample for plots
