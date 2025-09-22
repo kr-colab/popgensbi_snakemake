@@ -177,12 +177,12 @@ else:
 
 
 # dump posterior means, medians, etc in logspace and in natural units
-flat_rescaled_params = rescaled_params.reshape(-1, rescaled_params.shape[-1])
-quantiles = [0.025, 0.25, 0.5, 0.75, 0.975]
+#flat_rescaled_params = rescaled_params.reshape(-1, rescaled_params.shape[-1])
+quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
 labels = ["N_ANC", "N_CO", "N_FR_PRE", "N_FR_POST", "T_SPLIT", "M_CO_FR", "M_FR_CO"]
 
-post_means = flat_rescaled_params.mean(axis=0)
-post_quantiles = np.quantile(flat_rescaled_params, quantiles, axis=0).T
+post_means = rescaled_params.mean(axis=1).mean(axis=0)
+post_quantiles = np.quantile(rescaled_params, quantiles, axis=1).T.mean(axis=1)
 summary_csv = open(f"{args.output_prefix}posterior-summary-log10.csv", "w")
 summary_csv.write("parameter,post_mean,")
 for q in quantiles: summary_csv.write(f"post_quant_{q},")
@@ -194,8 +194,8 @@ for i, nm in enumerate(labels):
     summary_csv.write("\n")
 summary_csv.close()
 
-post_means = (10 ** flat_rescaled_params).mean(axis=0)
-post_quantiles = np.quantile(10 ** flat_rescaled_params, quantiles, axis=0).T
+post_means = (10 ** rescaled_params).mean(axis=1).mean(axis=0)
+post_quantiles = np.quantile(10 ** rescaled_params, quantiles, axis=1).T.mean(axis=1)
 summary_csv = open(f"{args.output_prefix}posterior-summary.csv", "w")
 summary_csv.write("parameter,post_mean,")
 for q in quantiles: summary_csv.write(f"post_quant_{q},")
@@ -206,6 +206,40 @@ for i, nm in enumerate(labels):
         summary_csv.write(f"{q},")
     summary_csv.write("\n")
 summary_csv.close()
+
+pretty_labels = [
+    r"Size of ancestral",
+    r"Size of CO",
+    r"Size of FR (ancient)",
+    r"Size of FR (current)",
+    r"Split time",
+    r"Migr CO $\rightarrow$ FR",
+    r"Migr FR $\rightarrow$ CO",
+]
+summary_tex = open(f"{args.output_prefix}posterior-summary.tex", "w")
+summary_tex.write(r"\begin{tabular}{lccccc}" + "\n")
+summary_tex.write(r" & & & \multicolumn{4}{c}{Quantiles} \\" + "\n")
+summary_tex.write(r" & Mean & Median & 0.05 & 0.25 & 0.75 & 0.95 \\" + "\n")
+for i, nm in enumerate(pretty_labels):
+    quants = post_quantiles[i]
+    summary_tex.write(nm + " & ")
+    if "Migr" in nm:
+        summary_tex.write(f"{post_means[i]:.2e} & ")
+        summary_tex.write(f"{post_quantiles[i, 2]:.2e} & ")
+        summary_tex.write(f"{post_quantiles[i, 0]:.2e} & ")
+        summary_tex.write(f"{post_quantiles[i, 1]:.2e} & ")
+        summary_tex.write(f"{post_quantiles[i, 3]:.2e} & ")
+        summary_tex.write(f"{post_quantiles[i, 4]:.2e} " + r"\\ ")
+    else:
+        summary_tex.write(f"{int(post_means[i]):,d} & ")
+        summary_tex.write(f"{int(post_quantiles[i, 2]):,d} & ")
+        summary_tex.write(f"{int(post_quantiles[i, 0]):,d} & ")
+        summary_tex.write(f"{int(post_quantiles[i, 1]):,d} & ")
+        summary_tex.write(f"{int(post_quantiles[i, 3]):,d} & ")
+        summary_tex.write(f"{int(post_quantiles[i, 4]):,d} " + r"\\ ")
+    summary_tex.write("\n")
+summary_tex.write(r"\end{tabular}" + "\n")
+summary_tex.close()
 
 
 # subsample for plots
