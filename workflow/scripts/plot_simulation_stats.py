@@ -10,7 +10,9 @@ from multiprocessing import Pool
 import ts_simulators
 
 
-    
+# Making sure path for plots exists...
+os.makedirs(os.path.dirname(snakemake.output.stats_hist), exist_ok=True)
+
 # Get information from config
 simulator_config = snakemake.params.simulator_config
 simulator = getattr(ts_simulators, simulator_config["class_name"])(simulator_config)
