@@ -4,3 +4,4 @@
 .test-workflow/*
 __pycache__
 example_data/*
+*.out
