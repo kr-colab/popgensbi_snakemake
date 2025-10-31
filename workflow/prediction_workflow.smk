@@ -31,6 +31,7 @@ VCF_DIR = os.path.join(PROJECT_DIR, VCF_PREFIX)
 TENSOR_DIR = os.path.join(VCF_DIR, "tensors")
 TREE_DIR = os.path.join(VCF_DIR, "trees")
 PLOT_DIR = os.path.join(VCF_DIR, "plots")
+SIM_ZARR = os.path.join(PROJECT_DIR, "tensors", "zarr")
 
 # Divvy up windows into chunks
 N_CHUNK = config["prediction"].get("n_chunk")
@@ -47,7 +48,7 @@ scattergather:
 rule predict_all:
     input:
         predictions = os.path.join(PLOT_DIR, "posteriors-across-windows.png"),
-
+        tree_stats_hist = os.path.join(PLOT_DIR, "tree_stats_hist.png"),
 
 rule process_all:
     input:
@@ -108,6 +109,23 @@ rule infer_batch:
         output_dir = TREE_DIR,
     script:
         "scripts/infer_batch.py"
+
+rule plot_tree_stats:
+    message:
+        "Plotting summary statistics of tree files..."
+    input:
+        zarr = rules.setup_prediction.output.zarr,
+        infer_done = gather.split(os.path.join(TREE_DIR, "{scatteritem}-infer.done")),
+    output:
+        tree_stats_hist = os.path.join(PLOT_DIR, "tree_stats_hist.png"),
+
+    params:
+        tree_dir = TREE_DIR,
+        plot_dir = PLOT_DIR,
+        simulation_zarr = SIM_ZARR,
+    threads: 10
+    resources: **CPU_RESOURCES
+    script: "scripts/plot_tree_stats.py"
 
 
 rule process_batch:

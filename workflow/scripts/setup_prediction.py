@@ -19,7 +19,7 @@ n_samples = vcz.sample_id.size
 n_chunks = len(snakemake.output.yaml)
 
 prediction_config = snakemake.params.prediction_config.copy()
-ancestral_fasta_path = prediction_config.get("ancestral_fasta")
+ancestral_fasta_path = prediction_config.get("ancestral_fasta", None)
 population_map_path = prediction_config.get("population_map")
 #window_type = prediction_config["window_type"]
 #window_size = prediction_config["window_size"]
@@ -60,13 +60,17 @@ zarr.save(f"{snakemake.input.vcz}/populations_metadata", populations_metadata)
 
 
 # add ancestral state information to vcz
-ancestral_fasta = FastaFile(ancestral_fasta_path)
 ancestral_state = np.full(vcz.variant_position.size, "N", dtype="U1")
-for i, contig in enumerate(vcz.contig_id):
-    fasta = np.fromiter(ancestral_fasta.fetch(reference=contig), dtype="U1")
-    contig_mask = vcz.variant_contig[:] == i
-    position = vcz.variant_position.get_mask_selection(contig_mask)
-    ancestral_state[contig_mask] = np.char.upper(fasta[position - 1])
+if ancestral_fasta_path is None:  # use reference allele
+    # FIXME: this may behave strangely if alleles are not SNPs
+    ancestral_state[:] = zarr.load(f"{snakemake.input.vcz}/variant_allele")[:, 0]
+else:
+    ancestral_fasta = FastaFile(ancestral_fasta_path)
+    for i, contig in enumerate(vcz.contig_id):
+        fasta = np.fromiter(ancestral_fasta.fetch(reference=contig), dtype="U1")
+        contig_mask = vcz.variant_contig[:] == i
+        position = vcz.variant_position.get_mask_selection(contig_mask)
+        ancestral_state[contig_mask] = np.char.upper(fasta[position - 1])
 zarr.save(f"{snakemake.input.vcz}/ancestral_state", ancestral_state)
 
 

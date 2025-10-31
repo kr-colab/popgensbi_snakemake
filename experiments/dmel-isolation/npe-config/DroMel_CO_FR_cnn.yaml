@@ -1,7 +1,7 @@
 # --- top level arguments are ALWAYS REQUIRED --- #
 
 # change this to the project directory you want to use
-project_dir: "/sietch_colab/natep/popgensbi_snakemake/AraTha_2epoch"
+project_dir: "/sietch_colab/data_share/popgen_npe/dromel-isolation"
 
 cpu_resources:
   runtime: "2h"
@@ -15,7 +15,7 @@ gpu_resources:
   slurm_extra: "--gres=gpu:1 --constraint=a100"
 
 random_seed: 1
-n_chunk: 50 # number of jobs for parallel simulation
+n_chunk: 40 # number of jobs for parallel simulation
 n_train: 10000
 n_val: 1000
 n_test: 1000
@@ -31,31 +31,32 @@ clip_max_norm: 5
 packed_sequence: False
 
 simulator:
-  class_name: "AraTha_2epoch"
+  class_name: "DroMel_CO_FR"
   # OPTIONAL CLASS KWARGS:
-  sequence_length: 100000
-  mutation_rate: 1.5e-8
-  recombination_rate: 1.5e-8
+  sequence_length: 300000
+  mutation_rate: 0.45e-8  # 0.55e-8 * 0.831 (stdpopsim rate * filtered snps)
+  recombination_rate: [0.5e-8, 3.0e-8]
+  haploid: True
   samples:
-    SouthMiddleAtlas: 10
+    CO: 10
+    FR: 9
 
 processor:
   class_name: "cnn_extract"
   # OPTIONAL CLASS KWARGS:
-  n_snps: 2000
+  n_snps: 5000
   maf_thresh: 0.0
 
 embedding_network:
   class_name: "ExchangeableCNN"
   # OPTIONAL CLASS KWARGS:
   output_dim: 64
-  input_rows: [10]
-  input_cols: [2000]
+  input_rows: [10, 9]
+  input_cols: [5000, 5000]
 
 prediction:
   n_chunk: 50
-  vcf: "example_data/AraTha_2epoch/snp.vcf.gz"
-  ancestral_fasta: "example_data/AraTha_2epoch/anc.fa.gz"
-  population_map: "example_data/AraTha_2epoch/popmap.yaml" # subset of samples, with populations
-  windows: "example_data/AraTha_2epoch/windows.bed" # windows to predict over
+  vcf: "/sietch_colab/data_share/popgen_npe/dromel-isolation/data/Chr2L.vcf.gz"
+  population_map: "/sietch_colab/data_share/popgen_npe/dromel-isolation/data/population_map.yaml" # subset of samples, with populations
+  windows: "/sietch_colab/data_share/popgen_npe/dromel-isolation/data/Chr2L.windows.bed" # windows to predict over
   min_snps_per_window: 1 # filter out low-density windows

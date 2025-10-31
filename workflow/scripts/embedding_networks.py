@@ -3,6 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
 # TODO:
 # - make this "exchangeable" by shuffling all columns but the last (requires handling packed_sequence separately)
 class RNN(nn.Module):
@@ -13,17 +14,32 @@ class RNN(nn.Module):
         :param output_size: the output size of the network
         """
         super().__init__()
-        self.rnn = nn.GRU(input_size, 84, num_layers=num_layers, batch_first=True, bidirectional=True)
+        self.rnn = nn.GRU(
+            input_size, 84, num_layers=num_layers, batch_first=True, bidirectional=True
+        )
         self.mlp = nn.Sequential(
-            nn.Linear(168 * num_layers, 256), 
+            nn.Linear(168 * num_layers, 256),
             nn.Dropout(dropout),
             nn.Linear(256, output_size),
         )
 
     def forward(self, x):
-        _, hn = self.rnn(x) # (2 * layers, batch, 84)
-        hn = hn.permute(1, 0, 2).reshape(hn.shape[1], -1) # (batch, 2 * layers * 84)
+        _, hn = self.rnn(x)  # (2 * layers, batch, 84)
+        hn = hn.permute(1, 0, 2).reshape(hn.shape[1], -1)  # (batch, 2 * layers * 84)
         return self.mlp(hn)
+
+
+class FrozenLayerNorm(nn.Module):
+    """ 
+    Layer norm without learnable weights, that can be applied to tensors
+    of variable sizes. The batch dimension is assumed to be the first, so
+    that mean/variance are calculated over the remaining dimensions.
+    """
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x): 
+        return F.layer_norm(x, x.shape[1:])
 
 
 # TODO: SBI has a built-in exchangeable layer, why not use this?
@@ -52,14 +68,14 @@ class SymmetricLayer(nn.Module):
             raise ValueError("func must be one of 'max', 'mean', or 'sum'")
 
 
-# TODO cleanup: 
+# TODO cleanup:
 # - BUG: this isn't working if sample sizes aren't equal across pops
 # - should work with a single pop given the ts_processor (make as general as possible)
 # - let the number of channels/kernel sizes/etc be settable
 # - remove the need to specify the unpadded input shapes, this can be figured out in forward
 # - the logic in forward requires a batch dimension
 # - could use the built-in symmetric layer from SBI
-class ExchangeableCNN_IN(nn.Module):
+class ExchangeableCNN(nn.Module):
     """
     This implements the Exchangeable CNN or permuation-invariant CNN from:
         Chan et al. 2018, https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7687905/
@@ -80,7 +96,14 @@ class ExchangeableCNN_IN(nn.Module):
     Then global pool make output dim (batch_size, outchannels2, 1, 1) and then pass to the feature extractor.
     """
 
-    def __init__(self, output_dim=64, input_rows=None, input_cols=None, channels=2, symmetric_func="max"):
+    def __init__(
+        self,
+        output_dim=64,
+        input_rows=None,
+        input_cols=None,
+        channels=2,
+        symmetric_func="max",
+    ):
         """
         :param output_dim: The desired dimension of the final 1D output vector
             to be used as the embedded data for training
@@ -107,16 +130,27 @@ class ExchangeableCNN_IN(nn.Module):
                 (channels, r, c) for r, c in zip(input_rows, input_cols)
             ]
         cnn_layers = []
-        cnn_layers.append(nn.Conv2d(channels, self.outchannels1, self.kernel_size1, stride=self.stride1))
+        cnn_layers.append(
+            nn.Conv2d(
+                channels, self.outchannels1, self.kernel_size1, stride=self.stride1
+            )
+        )
         cnn_layers.append(self.activation())
-        cnn_layers.append(nn.BatchNorm2d(num_features=self.outchannels1, track_running_stats=False))
-        cnn_layers.append(nn.Conv2d(self.outchannels1, self.outchannels2, self.kernel_size2, stride=self.stride2))
+        cnn_layers.append(FrozenLayerNorm())
+        cnn_layers.append(
+            nn.Conv2d(
+                self.outchannels1,
+                self.outchannels2,
+                self.kernel_size2,
+                stride=self.stride2,
+            )
+        )
         cnn_layers.append(self.activation())
-        cnn_layers.append(nn.BatchNorm2d(num_features=self.outchannels2, track_running_stats=False))
+        cnn_layers.append(FrozenLayerNorm())
 
         self.cnn = nn.Sequential(*cnn_layers)
         self.symmetric = SymmetricLayer(axis=2, func=symmetric_func)
-        self.globalpool = nn.AdaptiveAvgPool2d((1, 1)) 
+        self.globalpool = nn.AdaptiveAvgPool2d((1, 1))
         self.feature_extractor = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.outchannels2, 64),
@@ -143,7 +177,7 @@ class ExchangeableCNN_IN(nn.Module):
         # Otherwise we know there are no padded values and can just run the
         # input data through the network
         return self.feature_extractor(self.globalpool(self.symmetric(self.cnn(x))))
-    
+
 
 class SummaryStatisticsEmbedding(nn.Module):
     """
@@ -177,7 +211,7 @@ class SummaryStatisticsEmbedding(nn.Module):
 class SPIDNA_embedding_network(nn.Module):
     """
     SPIDNA architecture for processing genetic data.
-    
+
     Parameters
     ----------
     output_dim : int
@@ -187,44 +221,57 @@ class SPIDNA_embedding_network(nn.Module):
     num_feature : int
         Number of features in the convolutional layers
     """
-    def __init__(self, output_dim=64, num_block=3, num_feature=32):
+
+    def __init__(self, output_dim=64, num_block=3, num_feature=64):
         super().__init__()
+        # Validate that num_feature >= output_dim to prevent dimension mismatches
+        if num_feature < output_dim:
+            raise ValueError(
+                f"num_feature ({num_feature}) must be >= output_dim ({output_dim})"
+            )
+
         self.output_dim = output_dim
         self.num_feature = num_feature
-        # Initialize convolutional layers with padding
-        self.conv_pos = nn.Conv2d(1, num_feature, (1, 3), padding=(0, 1))
-        self.conv_pos_bn = nn.BatchNorm2d(num_feature, track_running_stats=False)
-        self.conv_snp = nn.Conv2d(1, num_feature, (1, 3), padding=(0, 1))
-        self.conv_snp_bn = nn.BatchNorm2d(num_feature, track_running_stats=False)
+        # Initialize convolutional layers without padding to match reference
+        self.conv_pos = nn.Conv2d(1, num_feature, (1, 3))
+        # self.conv_pos_bn = nn.BatchNorm2d(num_feature, track_running_stats=False)
+        self.conv_snp = nn.Conv2d(1, num_feature, (1, 3))
+        # self.conv_snp_bn = nn.BatchNorm2d(num_feature, track_running_stats=False)
         # Create SPIDNA blocks
-        self.blocks = nn.ModuleList([SPIDNABlock(num_feature, output_dim) for _ in range(num_block)])
+        self.blocks = nn.ModuleList(
+            [SPIDNABlock(num_feature, output_dim) for _ in range(num_block)]
+        )
 
     def forward(self, x):
         # Reshape input: (batch, channels, samples, snps)
         if len(x.shape) == 5:
             x = x.squeeze(1)
-        
+
         # Split and reshape position and SNP data
         pos = x[:, 0, :].view(x.shape[0], 1, 1, -1)  # Shape: (batch, 1, 1, snps)
         snp = x[:, 1:, :].unsqueeze(1)  # Shape: (batch, 1, samples, snps)
-        
+
         # Process position data and expand to match SNP dimensions
-        pos = F.relu(self.conv_pos_bn(self.conv_pos(pos)))
+        # pos = F.relu(self.conv_pos_bn(self.conv_pos(pos)))
+        pos_conv = self.conv_pos(pos)
+        pos = F.relu(F.layer_norm(pos_conv, pos_conv.shape[1:]))  # Using LayerNorm
         pos = pos.expand(-1, -1, snp.size(2), -1)
-        
+
         # Process SNP data
-        snp = F.relu(self.conv_snp_bn(self.conv_snp(snp)))
-        
+        # snp = F.relu(self.conv_snp_bn(self.conv_snp(snp)))
+        snp_conv = self.conv_snp(snp)
+        snp = F.relu(F.layer_norm(snp_conv, snp_conv.shape[1:]))  # Using LayerNorm
+
         # Combine features
         x = torch.cat((pos, snp), dim=1)
-        
+
         # Initialize output tensor
         output = torch.zeros(x.size(0), self.output_dim, device=x.device)
-        
+
         # Process through SPIDNA blocks
         for block in self.blocks:
             x, output = block(x, output)
-            
+
         return output
 
     def embedding(self, x):
@@ -238,40 +285,43 @@ class SPIDNABlock(nn.Module):
     """
     SPIDNA architecture for processing genetic data, basic unit
     """
-    
+
     def __init__(self, num_feature, output_dim):
         super().__init__()
-        # Add padding to maintain spatial dimensions
-        self.phi = nn.Conv2d(num_feature * 2, num_feature, (1, 3), padding=(0, 1))
-        self.phi_bn = nn.BatchNorm2d(num_feature * 2,track_running_stats=False)
+        self.num_feature = num_feature
+        self.output_dim = output_dim
+        # Remove padding to match reference implementation
+        self.phi = nn.Conv2d(num_feature * 2, num_feature, (1, 3))
+        # self.phi_bn = nn.BatchNorm2d(num_feature * 2, track_running_stats=False)
+        # Note: LayerNorm shape will be determined dynamically in forward pass
         self.maxpool = nn.MaxPool2d((1, 2))
-        self.fc = nn.Linear(num_feature, output_dim)
+        self.fc = nn.Linear(output_dim, output_dim)
 
     def forward(self, x, output):
-        # Apply batch norm and convolution
-        x = self.phi_bn(x)
-        x = self.phi(x)
-        
+        # Apply batch norm first, then convolution (matching reference)
+        # x = self.phi(self.phi_bn(x))
+        # LayerNorm: normalize over channel, height, width dimensions
+        x_normalized = F.layer_norm(x, x.shape[1:])
+        x = self.phi(x_normalized)
+
         # Average over samples dimension
         psi = torch.mean(x, 2, keepdim=True)
-        
-        # Process current output
-        current_features = torch.mean(psi, 3).squeeze(2)
+
+        # Process current output - slice only output_dim features
+        current_features = torch.mean(psi[:, : self.output_dim, :, :], 3).squeeze(2)
         current_output = self.fc(current_features)
-        
-        # Add to running output - let device placement be handled by Lightning
+
+        # Add to running output
         output = output + current_output
-        
+
         # Expand psi and combine with x
         psi = psi.expand(-1, -1, x.size(2), -1)
         x = torch.cat((x, psi), 1)
-        
-        # Apply maxpool if spatial dimension is large enough
-        if x.size(3) > 1:
-            x = F.relu(self.maxpool(x))
-        else:
-            x = F.relu(x)
-        
+
+        # Apply maxpool then ReLU (matching reference)
+        x = self.maxpool(x)
+        x = F.relu(x)
+
         return x, output
 
 
@@ -314,39 +364,34 @@ class ReLERNN(nn.Module):
         """
         super().__init__()
         self.shuffle_genotypes = shuffle_genotypes
-        self.rnn = nn.GRU(input_size, 84, num_layers=1, batch_first=True, bidirectional=True)
-        self.fc1 = nn.Sequential(
-            nn.Linear(168, 256),
-            nn.Dropout(0.35)
+        self.rnn = nn.GRU(
+            input_size, 84, num_layers=1, batch_first=True, bidirectional=True
         )
-        self.fc_pos = nn.Sequential(
-            nn.Linear(n_snps, 256)
-        )
+        self.fc1 = nn.Sequential(nn.Linear(168, 256), nn.Dropout(0.35))
+        self.fc_pos = nn.Sequential(nn.Linear(n_snps, 256))
         self.feature_ext = nn.Sequential(
-            nn.Linear(512, 64),
-            nn.Dropout(0.35),
-            nn.Linear(64, output_size)
+            nn.Linear(512, 64), nn.Dropout(0.35), nn.Linear(64, output_size)
         )
 
     def forward(self, x):
         # x is expected to be of shape (batch, sequence_length, 1 + input_size)
         # where the first feature is positional data and the rest is haplotype data.
-        pos = x[..., 0]   # (batch, sequence_length) == (batch, num_positions)
+        pos = x[..., 0]  # (batch, sequence_length) == (batch, num_positions)
         haps = x[..., 1:]  # (batch, sequence_length, input_size)
-        
+
         # If shuffle_genotypes is True, shuffle the haplotype data
         if self.shuffle_genotypes and self.training:
             perm = torch.randperm(haps.shape[-1])
-            haps = haps[..., perm]        
+            haps = haps[..., perm]
         # Process haplotype data via GRU
         _, hn = self.rnn(haps)  # hn: (num_layers * num_directions, batch, 84)
         hn = hn.permute(1, 0, 2).reshape(x.shape[0], -1)  # (batch, 168)
-        
+
         hapout = self.fc1(hn)  # (batch, 256)
         posout = self.fc_pos(pos)  # (batch, 256)
-        
+
         # Concatenate processed haplotype and position features
         catout = torch.cat([hapout, posout], dim=-1)  # (batch, 512)
-        
+
         # Final embedding extraction
         return self.feature_ext(catout)  # (batch, output_size)
