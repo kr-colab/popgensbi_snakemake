@@ -117,7 +117,7 @@ simulator:
     pop: 10
 '''
 
-# Variable Population Size Simulator configuration
+# Dependent Population Size Simulator configuration
 dependent_popn_config = '''
 simulator:
   class_name: "DependentVariablePopulationSize"

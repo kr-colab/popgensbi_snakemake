@@ -326,8 +326,40 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
     # not sure if we need the circular option at all?
     def _LD(self, haplotype, pos_vec, size_chr, circular=True, distance_bins=None):
         """
-        Compute LD for a subset of SNPs and return a DataFrame with only the mean r2.
+        Compute LD on a subsampled set of SNP pairs and return a DataFrame containing the mean r^2
+        per distance bin.
+
+        Gap sizes follow powers of 2. For each gap, SNP pairs are sampled with a random phase shift, 
+        then LD is computed and squared. Results are binned by physical distance and averaged.
+
+        Parameters
+        ----------
+        haplotype : array(n_SNP, n_samples)
+        pos_vec : array(n_SNP,)
+            Absolute genomic positions in [0, size_chr].
+        size_chr : int
+            Chromosome length.
+        circular : bool
+            Whether to consider the chromosome circular. If circular, the maximum distance between
+            two SNPs is half the chromosome. (Currently not used in distance computation.)
+        distance_bins : int or sequence of numbers, optional
+            If an int k is given, LD is averaged in k-1 logarithmic bins between 10^2 and size_chr,
+            with 0 inserted as the first edge. If a sequence is given, those values are used as
+            the bin edges directly. If None, 19 log-spaced bins between 10^2 and size_chr are used,
+            with 0 inserted as the first edge.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Index: pandas.IntervalIndex of distance bins. Columns: 'mean_r2' containing the
+            mean of r^2 within each distance bin.
+
+        Notes
+        -----
+        - Subsampling is stochastic due to random shifts when forming SNP pairs.
+        - LD per pair is computed as allel.rogers_huff_r(...)**2.
         """
+
         # Set up distance bins if not provided (kept here for potential grouping)
         if distance_bins is None or isinstance(distance_bins, int):
             if isinstance(distance_bins, int):
