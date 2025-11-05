@@ -37,7 +37,7 @@ simulator:
   mutation_rate: 1e-8
   num_time_windows: 21
   max_time: 130000
-  time_rate: 0..06
+  time_rate: 0.06
   samples:
     pop: 25
 
