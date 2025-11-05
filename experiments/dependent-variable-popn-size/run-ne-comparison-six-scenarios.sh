@@ -23,15 +23,14 @@ ANALYSIS_SEED=666
 # Configuration files
 V_CONFIG="npe-config/variable_popnSize_windowed_afs_ld.yaml"
 D_CONFIG="npe-config/dependent_popnSize_windowed_afs_ld.yaml"
-DL_CONFIG="npe-config/dependent_popnSize_windowed_afs_ld_longGENOME.yaml"
 
-echo "=== Using compare-analysis.py for each scenario (this works!) ==="
+# echo "=== Using compare-analysis.py for each scenario (this works!) ==="
 
 # Scenario 1: Medium
 echo -e "\n1. Medium..."
 python compare-analysis.py \
-    --configs $V_CONFIG $D_CONFIG $DL_CONFIG \
-    --labels "Varianble" "Dependent" "Dependent_longGENOME" \
+    --configs $V_CONFIG $D_CONFIG \
+    --labels "Varianble" "Dependent"  \
     --simulate \
     --params 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 3.7 1.5e-8 \
     --num-epochs $NUM_EPOCHS \
@@ -43,8 +42,8 @@ python compare-analysis.py \
 # Scenario 2: Large
 echo -e "\n2. Large..."
 python compare-analysis.py \
-    --configs  $V_CONFIG $D_CONFIG $DL_CONFIG \
-    --labels "Varianble" "Dependent" "Dependent_longGENOME" \
+    --configs  $V_CONFIG $D_CONFIG \
+    --labels "Varianble" "Dependent" \
     --simulate \
     --params 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 4.7 1.5e-8 \
     --num-epochs $NUM_EPOCHS \
@@ -56,8 +55,8 @@ python compare-analysis.py \
 # Scenario 3: Decline
 echo -e "\n3. Decline..."
 python compare-analysis.py \
-    --configs  $V_CONFIG $D_CONFIG $DL_CONFIG \
-    --labels "Varianble" "Dependent" "Dependent_longGENOME" \
+    --configs  $V_CONFIG $D_CONFIG \
+    --labels "Varianble" "Dependent"  \
     --simulate \
     --params 2.5 2.5 3 3 3 3 3.2 3.4 3.6 3.8 4 4.2 4.6 4.6 4.6 4.6 4.6 4.6 4.6 4.6 4.6 1.5e-8 \
     --num-epochs $NUM_EPOCHS \
@@ -69,8 +68,8 @@ python compare-analysis.py \
 # Scenario 4: Expansion
 echo -e "\n4. Expansion..."
 python compare-analysis.py \
-    --configs  $V_CONFIG $D_CONFIG $DL_CONFIG \
-    --labels "Varianble" "Dependent" "Dependent_longGENOME" \
+    --configs  $V_CONFIG $D_CONFIG \
+    --labels "Varianble" "Dependent"  \
     --simulate \
     --params 4.7 4.7 4.7 4.6 4.6 4.5 4.4 4.3 4 3.7 3.4 3.4 3.4 3.4 3.4 3.4 3.4 3.4 3.4 3.4 3.4 1.5e-8 \
     --num-epochs $NUM_EPOCHS \
@@ -82,8 +81,8 @@ python compare-analysis.py \
 # Scenario 5: Bottleneck
 echo -e "\n5. Bottleneck..."
 python compare-analysis.py \
-    --configs  $V_CONFIG $D_CONFIG $DL_CONFIG \
-    --labels "Varianble" "Dependent" "Dependent_longGENOME" \
+    --configs  $V_CONFIG $D_CONFIG \
+    --labels "Varianble" "Dependent"  \
     --simulate \
     --params 4.8 4.8 4.8 4.8 4.8 4.8 4.8 4.8 4.8 4.5 4.15 3.8 4.3 4.8 4.55 4.3 4.05 3.8 3.8 3.8 3.8 1.5e-8 \
     --num-epochs $NUM_EPOCHS \
@@ -95,8 +94,8 @@ python compare-analysis.py \
 # Scenario 6: Zigzag
 echo -e "\n6. Zigzag..."
 python compare-analysis.py \
-    --configs  $V_CONFIG $D_CONFIG $DL_CONFIG \
-    --labels "Varianble" "Dependent" "Dependent_longGENOME" \
+    --configs  $V_CONFIG $D_CONFIG \
+    --labels "Varianble" "Dependent"  \
     --simulate \
     --params 4.8 4.8 4.8 4.5 4.15 3.8 4.15 4.5 4.8 4.5 4.15 3.8 4.3 4.8 4.55 4.3 4.05 3.8 3.8 3.8 3.8 1.5e-8 \
     --num-epochs $NUM_EPOCHS \
@@ -105,7 +104,7 @@ python compare-analysis.py \
     --sim-seed $((SIM_SEED + 6)) \
     --analysis-seed $((ANALYSIS_SEED + 600))
 
-echo -e "\n=== Creating 3x6 panel plot from results ==="
+echo -e "\n=== Creating 2x6 panel plot from results ==="
 
 # Create the panel plot using the saved results
 python plot-6-scenarios.py \
@@ -117,7 +116,7 @@ python plot-6-scenarios.py \
                       $OUTPUT_DIR/zigzag \
     --scenario-labels "medium" "large" "decline" "expansion" "bottleneck" "zigzag" \
     --output $OUTPUT_DIR/ne_comparison_6-scenarios.png \
-    --figsize 15 12
+    --figsize 15 20
 
 echo -e "\nComparison complete! Results saved to $OUTPUT_DIR/"
 echo "Main figure: $OUTPUT_DIR/ne_comparison_6_scenarios.png"
