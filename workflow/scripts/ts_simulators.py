@@ -370,3 +370,144 @@ class recombination_rate(BaseSimulator):
         ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
 
         return ts, theta
+
+class DependentVariablePopulationSize(BaseSimulator):
+    """
+    Simulate a population with variable population size across multiple time windows, with each 
+    population size dependent on the previous one.
+    The model consists of a single population that undergoes multiple size changes.
+    """
+    default_config = {
+        # FIXED PARAMETERS
+        "samples": {"pop0": 25},
+        "sequence_length": 2e6,
+        "mutation_rate": 1e-8,
+        "num_time_windows": 21,
+        "maf": 0.05,
+        # RANDOM PARAMETERS (UNIFORM)
+        "pop_sizes": [1e2, 1e5],      # Range for population sizes (log10 space)
+        "pop_changes": [-1, 1],      # Range for population size changes (* 10 ** beta)
+        "recomb_rate": [1e-9, 1e-8],  # Range for recombination rate
+        # TIME PARAMETERS
+        "max_time": 130000,  # Maximum time for population events
+        "time_rate": 0.1,    # Rate at which time changes across windows
+    }
+
+    def __init__(self, config: dict):
+        super().__init__(config, self.default_config)
+        # Set up parameters list
+        self.parameters = [f"N_{i}" for i in range(self.num_time_windows)] + ["recomb_rate"]
+        
+        # Create parameter ranges in the same format as AraTha_2epoch
+        # Population sizes (in log10 space)
+        pop_size_range = [[np.log10(self.pop_sizes[0]), np.log10(self.pop_sizes[1])]
+                          for _ in range(self.num_time_windows)]
+        pop_change_ranges = [[self.pop_changes[0], self.pop_changes[1]]
+                             for _ in range(1,self.num_time_windows)]
+        # Add recombination rate range
+        param_ranges = pop_size_range + [self.recomb_rate]
+        
+        # Set up prior using BoxUniform
+        self.prior = BoxUniform(
+            low=torch.tensor([r[0] for r in param_ranges]),
+            high=torch.tensor([r[1] for r in param_ranges])
+        )
+        self.beta_prior = BoxUniform(
+            low=torch.tensor([b[0] for b in pop_change_ranges]),
+            high=torch.tensor([b[1] for b in pop_change_ranges])
+        )
+        
+        # Calculate fixed time points for population size changes
+        self.change_times = self._calculate_change_times()
+
+    def _calculate_change_times(self) -> np.ndarray:
+        """Calculate the times at which population size changes occur using an exponential spacing."""
+        times = [(np.exp(np.log(1 + self.time_rate * self.max_time) * i / 
+                        (self.num_time_windows - 1)) - 1) / self.time_rate 
+                for i in range(self.num_time_windows)]
+        return np.around(times).astype(int)
+    
+    def _generate_dependent_pop_sizes(self) -> np.ndarray:
+        """
+        Generate a sequence of population sizes where the first population size N_1
+        is sampled from a uniform distribution corresponding to the most recent
+        time window. The following population sizes are generated following
+        N_i = N_{i-1} * 10 ^ β for i in [2,...,num_time_windows], unless N_i
+        is outside of pop_ranges. If so N_i is set to the max/min population size
+        """
+        prior_sample = self.prior.sample().numpy()
+        # only the first sample from prior will be used
+        beta_sample = self.beta_prior.sample().numpy()
+        modified_prior = prior_sample.copy()
+        # The first value is uniformly sampled within the log10 bounds
+        for i in range(self.num_time_windows-1):
+            # For subsequent time windows, calculate the new value based on the previous one and beta
+            new_value = modified_prior[i] + beta_sample[i]
+            # If the new value is outside the bounds, set it to the max/min
+            if new_value > np.log10(self.pop_sizes[1]):
+                new_value = np.log10(self.pop_sizes[1])
+            if new_value < np.log10(self.pop_sizes[0]):
+                new_value = np.log10(self.pop_sizes[0])
+            modified_prior[i+1] = new_value
+
+        # Return the sampled prior and recombination rate
+        return modified_prior
+
+    def __call__(self, seed: int = None) -> (tskit.TreeSequence, np.ndarray):
+        if seed is not None:
+            torch.manual_seed(seed)
+        
+        min_snps = 400
+        max_attempts = 100
+        attempt = 0
+        
+        while attempt < max_attempts:
+            # Sample parameters directly from prior (like AraTha_2epoch)
+            theta = self._generate_dependent_pop_sizes()
+            
+            pop_sizes = 10**theta[:-1]  # All but last element are for the population sizes
+            recomb_rate = theta[-1]  # Last element is recombination rate
+            
+            # Create demography
+            demography = msprime.Demography()
+            demography.add_population(name="pop0", initial_size=float(pop_sizes[0]))
+            
+            # Add population size changes at calculated time intervals
+            for i in range(1, len(pop_sizes)):
+                demography.add_population_parameters_change(
+                    time=self.change_times[i],
+                    initial_size=float(pop_sizes[i]),
+                    growth_rate=0,
+                    population="pop0"
+                )
+
+            # Simulate ancestry
+            ts = msprime.sim_ancestry(
+                samples=self.samples,
+                demography=demography,
+                sequence_length=self.sequence_length,
+                recombination_rate=recomb_rate,
+                random_seed=seed
+            )
+            
+            # Add mutations
+            ts = msprime.sim_mutations(ts, rate=self.mutation_rate, random_seed=seed)
+            
+            # Check if we have enough SNPs after MAF filtering
+            geno = ts.genotype_matrix().T
+            num_sample = ts.num_samples
+            
+            row_sum = np.sum(geno, axis=0)
+            keep = np.logical_and.reduce([
+                row_sum > num_sample * self.maf,
+                num_sample - row_sum > num_sample * self.maf
+            ])
+            
+            if np.sum(keep) >= min_snps:
+                return ts, theta
+                
+            attempt += 1
+            if seed is not None:
+                seed += 1
+        
+        raise RuntimeError(f"Failed to generate tree sequence with at least {min_snps} SNPs after {max_attempts} attempts")    

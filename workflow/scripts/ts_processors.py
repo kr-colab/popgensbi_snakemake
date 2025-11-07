@@ -326,70 +326,56 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
     # not sure if we need the circular option at all?
     def _LD(self, haplotype, pos_vec, size_chr, circular=True, distance_bins=None):
         """
-        Compute LD for a subset of SNPs drawn with different gap sizes in between them.
-        Gap sizes follow power 2 distribution.
-        The LD is then computed and averaged over different bin (distance_bins) sizes.
-
-        Parameters ---------- haplotype : numpy 2D array or allel.haplotype SNP matrix where in the first dimension are
-        the SNP (rows) and in the second dimension (columns) are the samples. pos_vec : 1D array array of absolute
-        positions in [0, size_chr]. size_chr : int Size of the chromosome. circular : bool Whether to consider the
-        chromosome circular or not. If circular, the maximum distance between 2 SNPs is thus half the chromosome.
-        distance_bins : int or list LD will be averaged by bins of distances e.g. if distance_bins = [0, 100, 1000,
-        10000], LD will be averaged for the groups [0,100[, [100, 1000[, and [1000, 10000[ If distance_bins is an int,
-        it defines the number of bins of distances for which to compute the LD The bins are created in a logspace If
-        distance_bins is a list, they will be used instead
-
+        Compute LD on a subsampled set of SNP pairs and return a DataFrame containing the mean r^2
+        per distance bin.
+        Gap sizes follow powers of 2. For each gap, SNP pairs are sampled with a random phase shift, 
+        then LD is computed and squared. Results are binned by physical distance and averaged.
+        Parameters
+        ----------
+        haplotype : array(n_SNP, n_samples)
+        pos_vec : array(n_SNP,)
+            Absolute genomic positions in [0, size_chr].
+        size_chr : int
+            Chromosome length.
+        circular : bool
+            Whether to consider the chromosome circular. If circular, the maximum distance between
+            two SNPs is half the chromosome. (Currently not used in distance computation.)
+        distance_bins : int or sequence of numbers, optional
+            If an int k is given, LD is averaged in k-1 logarithmic bins between 10^2 and size_chr,
+            with 0 inserted as the first edge. If a sequence is given, those values are used as
+            the bin edges directly. If None, 19 log-spaced bins between 10^2 and size_chr are used,
+            with 0 inserted as the first edge.
         Returns
         -------
-        DataFrame
-            Table with the distance_bins as index, and the mean value of
+        pandas.DataFrame
+            Index: pandas.IntervalIndex of distance bins. Columns: 'mean_r2' containing the
+            mean of r^2 within each distance bin.
+        Notes
+        -----
+        - Subsampling is stochastic due to random shifts when forming SNP pairs.
+        - LD per pair is computed as allel.rogers_huff_r(...)**2.
         """
+
+        # Set up distance bins if not provided (kept here for potential grouping)
         if distance_bins is None or isinstance(distance_bins, int):
             if isinstance(distance_bins, int):
                 n_bins = distance_bins - 1
             else:
                 n_bins = 19
-            if circular:
-                distance_bins = np.logspace(2, np.log10(size_chr // 2), n_bins)
-                distance_bins = np.insert(distance_bins, 0, [0])
-            else:
-                distance_bins = np.logspace(2, np.log10(size_chr), n_bins)
-                distance_bins = np.insert(distance_bins, 0, [0])
-
-        # Iterate through gap sizes
+            distance_bins = np.logspace(2, np.log10(size_chr), n_bins)
+            distance_bins = np.insert(distance_bins, 0, [0])
+            
         n_SNP, n_samples = haplotype.shape
         gaps = (2 ** np.arange(0, np.log2(n_SNP), 1)).astype(int)
 
-        # Initialize lists to store selected SNP pairs and LD values
         selected_snps = []
         for gap in gaps:
-            snps = np.arange(0, n_SNP, gap) + np.random.randint(
-                0, (n_SNP - 1) % gap + 1
-            )
-            # adding a random start (+1, bc 2nd bound in randint is exlusive)
+            snps = np.arange(0, n_SNP, gap) + np.random.randint(0, (n_SNP - 1) % gap + 1)
+            snp_pairs = np.unique([((snps[i] + i) % n_SNP, (snps[i + 1] + i) % n_SNP) for i in range(len(snps) - 1)], axis=0)
 
-            # non overlapping contiguous pairs
-            # snps=[ 196, 1220, 2244] becomes
-            # snp_pairs=[(196, 1220), (1221, 2245)]
-            snp_pairs = np.unique(
-                [
-                    ((snps[i] + i) % n_SNP, (snps[i + 1] + i) % n_SNP)
-                    for i in range(len(snps) - 1)
-                ],
-                axis=0,
-            )
-
-            # If we don't have enough pairs (typically when gap is large), we add a random rotation until we have at
-            # least 300) count = 0
-
-            if not circular:
-                snp_pairs = snp_pairs[snp_pairs[:, 0] < snp_pairs[:, 1]]
+            snp_pairs = snp_pairs[snp_pairs[:, 0] < snp_pairs[:, 1]]
             last_pair = snp_pairs[-1]
-
-            if circular:
-                max_value = n_SNP - 1
-            else:
-                max_value = n_SNP - gap - 1
+            max_value = n_SNP - gap - 1
 
             while len(snp_pairs) <= min(300, max_value):
                 random_shift = np.random.randint(1, n_SNP) % n_SNP
@@ -398,47 +384,30 @@ class tskit_windowed_sfs_plus_ld(BaseProcessor):
                     np.concatenate([snp_pairs, new_pair.reshape(1, 2)]), axis=0
                 )
                 last_pair = new_pair
-
-                if not circular:
-                    snp_pairs = snp_pairs[snp_pairs[:, 0] < snp_pairs[:, 1]]
-
+                snp_pairs = snp_pairs[snp_pairs[:, 0] < snp_pairs[:, 1]]
             selected_snps.append(snp_pairs)
 
-        # Functions to aggregate the values within each distance bin
-        agg_bins = {"snp_dist": ["mean"], "r2": ["mean", "count", "sem"]}
+        # Collect r2 values into a DataFrame.
+        agg_bins = {"snp_dist": ["mean"], "r2": ["mean"]}
 
         ld = pd.DataFrame()
         for i, snps_pos in enumerate(selected_snps):
-
-            if circular:
-                sd = pd.DataFrame(
-                    (np.diff(pos_vec[snps_pos]) % size_chr) % (size_chr // 2),
-                    columns=["snp_dist"],
-                )  # %size_chr/2 because max distance btw 2 SNP is size_chr/2
-            else:
-                sd = pd.DataFrame((np.diff(pos_vec[snps_pos])), columns=["snp_dist"])
-
+            sd = pd.DataFrame((np.diff(pos_vec[snps_pos])), columns=["snp_dist"])
             sd["dist_group"] = pd.cut(sd.snp_dist, bins=distance_bins)
             sr = [allel.rogers_huff_r(snps) ** 2 for snps in haplotype[snps_pos]]
             sd["r2"] = sr
             sd["gap_id"] = i
             ld = pd.concat([ld, sd])
 
-        ld2 = ld.dropna().groupby("dist_group", observed=False).agg(agg_bins)
+        ld2 = ld.dropna().groupby("dist_group",observed=False).agg(agg_bins)
 
         # Flatten the MultiIndex columns and rename explicitly
-        ld2.columns = ["_".join(col).strip() for col in ld2.columns.values]
-        ld2 = ld2.rename(
-            columns={
-                "snp_dist_mean": "mean_dist",
-                "r2_mean": "mean_r2",
-                "r2_count": "Count",
-                "r2_sem": "sem_r2",
-            }
-        )
-        # ld2 = ld2.fillna(-1)
-
-        return ld2[["mean_dist", "mean_r2", "Count", "sem_r2"]]
+        ld2.columns = ['_'.join(col).strip() for col in ld2.columns.values]
+        ld2 = ld2.rename(columns={
+            'snp_dist_mean': 'mean_dist',
+            'r2_mean': 'mean_r2'
+        })
+        return ld2[['mean_r2']]
 
     def __call__(self, ts: tskit.TreeSequence) -> np.ndarray:
         # Get number of populations with samples
