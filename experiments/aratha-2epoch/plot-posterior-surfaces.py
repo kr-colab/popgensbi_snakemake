@@ -20,6 +20,7 @@ args = parser.parse_args()
 # --- plot log-likelihood/log-probability surfaces ---
 labels = {
     "MomentsGodambe": "moments-sfs",
+    "ABC-SMC": "abc-smc",
     "SummaryStatisticsEmbedding": "npe-sfs",
     "ExchangeableCNN": "npe-cnn",
     "RNN": "npe-rnn",

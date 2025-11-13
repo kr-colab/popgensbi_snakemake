@@ -163,8 +163,9 @@ rule calculate_coverage:
         import matplotlib.pyplot as plt
         colors = [plt.get_cmap("tab10")(x) for x in np.linspace(0, 1, 10)]
         labels = {
-            "MomentsGodambe": "moments-sfs", "ExchangeableCNN": "npe-cnn", 
+            "MomentsGodambe": "moments-sfs", "ExchangeableCNN": "npe-cnn",
             "RNN": "npe-rnn", "SummaryStatisticsEmbedding": "npe-sfs",
+            "ABC-SMC": "abc-smc",
         }
         # coverage
         rows = 1

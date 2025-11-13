@@ -24,6 +24,9 @@ import ts_simulators
 import ts_processors
 from utils import get_least_busy_gpu
 
+# ABC utilities
+import abc_utils
+
 
 #if torch.cuda.is_available():
 #    best_gpu = get_least_busy_gpu()
@@ -332,6 +335,19 @@ pickle.dump(
     open(f"{args.outpath}/moments-fit.pkl", "wb"),
 )
 
+
+# --- ABC inference using summary statistics ---
+print("Running ABC-SMC inference...")
+abc_samples, abc_trace = abc_utils.run_abc_smc(
+    obs_ts=ts,
+    simulator_config=simulator_config,
+    prior_bounds=np.column_stack([prior_low, prior_high]),
+    n_samples=args.posterior_samples,
+    seed=args.seed,
+    num_cores=args.num_cpus,
+)
+
+
 # DEBUG: check against the moments implementation
 #from moments.Godambe import GIM_uncert
 #from moments.Godambe import FIM_uncert
@@ -361,11 +377,11 @@ pickle.dump(
 text_offset = np.array([-(prior_high[0] - prior_low[0]) * 0.01, 0])
 plt.clf()
 rows = 1
-cols = len(args.configfile) + 1
+cols = len(args.configfile) + 2  # +1 for moments, +1 for ABC
 fig, axs = plt.subplots(
-    rows, cols, 
-    figsize=(cols * 5, rows * 4), 
-    constrained_layout=True, 
+    rows, cols,
+    figsize=(cols * 5, rows * 4),
+    constrained_layout=True,
     squeeze=False,
 )
 
@@ -399,6 +415,32 @@ if not args.skip_bootstrap:
 else:
     posterior_samples.append(godambe_samples)
     posterior_labels.append("MomentsGodambe")
+
+# Add ABC to posterior data
+posterior_samples.append(abc_samples)
+posterior_labels.append("ABC-SMC")
+abc_surface = abc_utils.estimate_abc_surface(abc_samples, breaks_nu, breaks_T)
+posterior_surface.append(abc_surface)
+
+# Plot ABC panel
+abc_mean = abc_samples.mean(axis=0)
+img = axs[0, 1].pcolormesh(
+    breaks_nu, breaks_T,
+    abc_surface.reshape(grid_size, grid_size).T,
+    cmap="terrain",
+)
+axs[0, 1].plot(*args.params, "o", color="red", markersize=4)
+axs[0, 1].text(
+    *(args.params + text_offset), s="True",
+    color="red", ha="right", va="center", size=10,
+)
+axs[0, 1].plot(*abc_mean, "o", color="green", markersize=4)
+axs[0, 1].text(
+    *(abc_mean + text_offset), s=r"$\mathbb{E}[\theta]$",
+    color="green", ha="right", va="center", size=10,
+)
+axs[0, 1].set_title("ABC-SMC")
+plt.colorbar(img, ax=axs[0, 1], label="log posterior")
 
 # plot the log posteriors
 for i, configfile in enumerate(args.configfile):
@@ -471,23 +513,23 @@ for i, configfile in enumerate(args.configfile):
     posterior_surface.append(grid_logprob)
     mean = posterior_samples[-1].mean(axis=0)
 
-    img = axs[0, i + 1].pcolormesh(
+    img = axs[0, i + 2].pcolormesh(
         breaks_nu, breaks_T,
-        grid_logprob.reshape(grid_size, grid_size).T, 
-        cmap="terrain", 
+        grid_logprob.reshape(grid_size, grid_size).T,
+        cmap="terrain",
     )
-    axs[0, i + 1].plot(*args.params, "o", color="red", markersize=4)
-    axs[0, i + 1].text(
-        *(args.params + text_offset), s="True", 
+    axs[0, i + 2].plot(*args.params, "o", color="red", markersize=4)
+    axs[0, i + 2].text(
+        *(args.params + text_offset), s="True",
         color="red", va="center", ha="right", size=10,
     )
-    axs[0, i + 1].plot(*mean, "o", color="green", markersize=4)
-    axs[0, i + 1].text(
-        *(mean + text_offset), s=r"$\mathbb{E}[\theta]$", 
+    axs[0, i + 2].plot(*mean, "o", color="green", markersize=4)
+    axs[0, i + 2].text(
+        *(mean + text_offset), s=r"$\mathbb{E}[\theta]$",
         color="green", va="center", ha="right", size=10,
     )
-    axs[0, i + 1].set_title(f"{embedding_name}")
-    plt.colorbar(img, ax=axs[0, i + 1], label="log posterior")
+    axs[0, i + 2].set_title(f"{embedding_name}")
+    plt.colorbar(img, ax=axs[0, i + 2], label="log posterior")
 fig.supxlabel(r"Bottleneck severity ($\nu$)")
 fig.supylabel(r"Time of bottleneck ($T$)")
 plt.savefig(f"{args.outpath}/loglik-surface.png")
