@@ -80,7 +80,7 @@ rule compare_posteriors:
                 echo "Skipping $SEED (already completed)"
                 continue
             fi
-            ~/miniforge3/envs/popgensbi_env/bin/python compare-posteriors.py \
+            python compare-posteriors.py \
               --skip-bootstrap \
               --skip-sanity-checks \
               --num-cpus {threads} \
