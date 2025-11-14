@@ -75,6 +75,11 @@ rule compare_posteriors:
         """
         while read SEED NU T; do
             OUTDIR="`dirname {output.done}`/$SEED"
+            # Skip if simulation already completed
+            if [ -f "$OUTDIR/posterior-samples.pkl" ]; then
+                echo "Skipping $SEED (already completed)"
+                continue
+            fi
             python compare-posteriors.py \
               --skip-bootstrap \
               --skip-sanity-checks \
@@ -105,13 +110,20 @@ rule calculate_coverage:
         alpha_grid = np.linspace(0.0, 0.5, grid_size + 2)[1:-1]
         true_values = []
         coverage = None
+        required_methods = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding", "ABC-Rejection"]
         for file in input.done:
             base = os.path.dirname(file)
             for line in open(file.removesuffix(".done") + ".txt"):
                 seed, *_ = line.split()
                 sdir = f"{base}/{seed}"
+                # Skip if simulation didn't complete
+                if not os.path.exists(f"{sdir}/posterior-samples.pkl"):
+                    continue
                 true = pickle.load(open(f"{sdir}/generative-params.pkl", "rb"))
                 samp = pickle.load(open(f"{sdir}/posterior-samples.pkl", "rb"))
+                # Skip if any required method is missing
+                if not all(m in samp for m in required_methods):
+                    continue
                 if coverage is None: 
                     coverage = {
                         k: np.zeros((grid_size + 1, grid_size + 1, grid_size, 2))
@@ -163,8 +175,9 @@ rule calculate_coverage:
         import matplotlib.pyplot as plt
         colors = [plt.get_cmap("tab10")(x) for x in np.linspace(0, 1, 10)]
         labels = {
-            "MomentsGodambe": "moments-sfs", "ExchangeableCNN": "npe-cnn", 
+            "MomentsGodambe": "moments-sfs", "ExchangeableCNN": "npe-cnn",
             "RNN": "npe-rnn", "SummaryStatisticsEmbedding": "npe-sfs",
+            "ABC-SMC": "abc-smc", "ABC-Rejection": "abc-rejection",
         }
         # coverage
         rows = 1
@@ -228,20 +241,28 @@ rule calculate_mse:
         import pickle
         true_values = []
         mode_estimates = None
+        required_methods = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding", "ABC-Rejection"]
         for file in input.done:
             base = os.path.dirname(file)
             for line in open(file.removesuffix(".done") + ".txt"):
                 seed, *_ = line.split()
                 sdir = f"{base}/{seed}"
+                # Skip if simulation didn't complete
+                if not os.path.exists(f"{sdir}/posterior-surfaces.pkl"):
+                    continue
                 true = pickle.load(open(f"{sdir}/generative-params.pkl", "rb"))
                 surf = pickle.load(open(f"{sdir}/posterior-surfaces.pkl", "rb"))
                 nu = (surf["breaks_nu"][:-1] + surf["breaks_nu"][1:]) / 2
                 T = (surf["breaks_T"][:-1] + surf["breaks_T"][1:]) / 2
                 surfaces = surf["surfaces"]
-                if mode_estimates is None: 
-                    mode_estimates = {k: [] for k in surfaces}
-                    mean_estimates = {k: [] for k in surfaces}
-                for k, v in surfaces.items():  # get coverage and increment
+                # Skip if any required method is missing
+                if not all(m in surfaces for m in required_methods):
+                    continue
+                if mode_estimates is None:
+                    mode_estimates = {k: [] for k in required_methods}
+                    mean_estimates = {k: [] for k in required_methods}
+                for k in required_methods:
+                    v = surfaces[k]
                     z = np.exp(v) / np.sum(np.exp(v))
                     i, j = np.unravel_index(v.argmax(), v.shape)
                     mode = np.array([nu[i], T[j]])
@@ -261,8 +282,8 @@ rule calculate_mse:
             rows, cols, figsize=(cols * 4, rows * 4), 
             constrained_layout=True,
         )
-        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding"]
-        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS"]
+        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding", "ABC-Rejection"]
+        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS", "ABC-rejection"]
         for i, k in enumerate(panels):
             for j in range(2):
                 mse = np.mean((true_values[:, j] - mode_estimates[k][:, j]) ** 2)
@@ -292,8 +313,8 @@ rule calculate_mse:
             constrained_layout=True,
         )
         prior_mean = np.array([np.mean(SIZE_BOUNDS), np.mean(TIME_BOUNDS)])
-        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding"]
-        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS"]
+        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding", "ABC-Rejection"]
+        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS", "ABC-rejection"]
         for i, k in enumerate(panels):
             for j in range(2):
                 mse = np.mean((true_values[:, j] - mean_estimates[k][:, j]) ** 2)
@@ -323,8 +344,8 @@ rule calculate_mse:
             rows, cols, figsize=(cols * 4, rows * 4), 
             constrained_layout=True, sharey=True,
         )
-        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding"]
-        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS"]
+        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding", "ABC-Rejection"]
+        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS", "ABC-rejection"]
         errs_nu = []
         errs_T = []
         for i, k in enumerate(panels):
@@ -333,9 +354,11 @@ rule calculate_mse:
         axs[0].boxplot(errs_nu, tick_labels=labels, showfliers=False)
         axs[0].axhline(y=prior_mean[0], linestyle="dashed", color="black")
         axs[0].set_title(r"Bottleneck severity ($\nu$)")
+        axs[0].tick_params(axis='x', labelsize=8)
         axs[1].boxplot(errs_T, tick_labels=labels, showfliers=False)
         axs[1].axhline(y=prior_mean[1], linestyle="dashed", color="black")
         axs[1].set_title(r"Bottleneck timing ($T$)")
+        axs[1].tick_params(axis='x', labelsize=8)
         fig.supylabel("|posterior mean - truth|")
         plt.savefig(output.mean_boxplot)
         # boxplots (posterior mode)
@@ -347,8 +370,8 @@ rule calculate_mse:
             rows, cols, figsize=(cols * 4, rows * 4), 
             constrained_layout=True, sharey=True,
         )
-        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding"]
-        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS"]
+        panels = ["MomentsGodambe", "ExchangeableCNN", "RNN", "SummaryStatisticsEmbedding", "ABC-Rejection"]
+        labels = ["moments-SFS", "npe-CNN", "npe-RNN", "npe-SFS", "ABC-rejection"]
         errs_nu = []
         errs_T = []
         for i, k in enumerate(panels):
@@ -357,9 +380,11 @@ rule calculate_mse:
         axs[0].boxplot(errs_nu, tick_labels=labels, showfliers=False)
         axs[0].axhline(y=prior_mean[0], linestyle="dashed", color="black")
         axs[0].set_title(r"Bottleneck severity ($\nu$)")
+        axs[0].tick_params(axis='x', labelsize=8)
         axs[1].boxplot(errs_T, tick_labels=labels, showfliers=False)
         axs[1].axhline(y=prior_mean[1], linestyle="dashed", color="black")
         axs[1].set_title(r"Bottleneck timing ($T$)")
+        axs[1].tick_params(axis='x', labelsize=8)
         fig.supylabel("|posterior mode - truth|")
         plt.savefig(output.mode_boxplot)
             

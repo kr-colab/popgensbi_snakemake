@@ -3,6 +3,7 @@ import numpy as np
 import tskit
 import sys
 import os
+import io
 import yaml
 import torch
 import moments
@@ -24,16 +25,21 @@ import ts_simulators
 import ts_processors
 from utils import get_least_busy_gpu
 
+# ABC utilities
+import abc_utils
 
-#if torch.cuda.is_available():
-#    best_gpu = get_least_busy_gpu()
-#    device = f"cuda:{best_gpu}"
-#else:
-#    device = "cpu"
-# TODO: for some reason DirectPosterior.sample is using tensors on multiple
-# GPUs and erroring out, if the above is used to get a free device. Need to
-# sort out why this is happening. Seems to work fine outside of snakemake.
-device = "cuda:0"  # DEBUG: hardcoded for now
+
+# Use round-robin GPU assignment to avoid contention
+if torch.cuda.is_available():
+    # Assign GPU based on process ID to distribute load
+    num_gpus = torch.cuda.device_count()
+    gpu_id = os.getpid() % num_gpus
+    device = f"cuda:{gpu_id}"
+    # Set as default device to avoid device mismatch errors in sbi
+    torch.cuda.set_device(gpu_id)
+    print(f"Process {os.getpid()} using GPU {gpu_id}/{num_gpus-1}")
+else:
+    device = "cpu"
 
 
 parser = argparse.ArgumentParser(
@@ -62,6 +68,7 @@ parser.add_argument("--seed", help="Random seed passed to simulator", type=int, 
 parser.add_argument("--grid-size", help="Grid size for plots", type=int, default=25)
 parser.add_argument("--posterior-samples", help="Number of samples to draw from posterior/bootstrap", type=int, default=1000)
 parser.add_argument("--num-cpus", help="Number of workers for parallel computation", type=int, default=20)
+parser.add_argument("--quantile", help="Quantile for ABC rejection (e.g., 0.01 for top 1% closest simulations)", type=float, default=0.01)
 args = parser.parse_args()
 
 
@@ -323,14 +330,127 @@ def score_parallel(sfs, pars):
 #jac_score = np.mean(np.stack(boot_hessian), axis=0)
 boot_score = ray.get([score_parallel.remote(sfs, mle) for sfs in bootstrap_sfs])
 var_score = np.cov(np.stack(boot_score).T)
-godambe = hessian @ np.linalg.inv(var_score) @ hessian
+
+# Try to compute Godambe matrix, with fallback to Fisher if singular
+try:
+    var_score_inv = np.linalg.inv(var_score)
+    godambe = hessian @ var_score_inv @ hessian
+    godambe_inv = np.linalg.inv(godambe)
+    print("Using Godambe information matrix")
+except np.linalg.LinAlgError as e:
+    print(f"Warning: Matrix inversion failed ({e}), falling back to Fisher information matrix")
+    godambe = hessian
+    try:
+        godambe_inv = np.linalg.inv(hessian)
+    except np.linalg.LinAlgError:
+        print("Warning: Fisher matrix also singular, using pseudo-inverse")
+        godambe_inv = np.linalg.pinv(hessian)
+
+# Check condition number and add regularization if needed
+cond_num = np.linalg.cond(godambe_inv)
+if cond_num > 1e10:
+    print(f"Warning: Covariance matrix is poorly conditioned (cond={cond_num:.2e}), adding regularization")
+    godambe_inv += np.eye(godambe_inv.shape[0]) * 1e-6
+
 godambe_samples = rng.multivariate_normal(
-    mean=mle, cov=np.linalg.inv(godambe), size=args.posterior_samples,
+    mean=mle, cov=godambe_inv, size=args.posterior_samples,
 )
 pickle.dump(
-    {"MLE": mle, "GIM": np.linalg.inv(godambe), "FIM": np.linalg.inv(hessian)},
+    {"MLE": mle, "GIM": godambe_inv, "FIM": np.linalg.inv(hessian)},
     open(f"{args.outpath}/moments-fit.pkl", "wb"),
 )
+
+
+# --- ABC inference using summary statistics ---
+# TEMPORARILY COMMENTED OUT FOR TESTING ABC-REJECTION ONLY
+#print("Running ABC-SMC inference...")
+#abc_smc_samples, abc_trace = abc_utils.run_abc_smc(
+#    obs_ts=ts,
+#    simulator_config=simulator_config,
+#    prior_bounds=np.column_stack([prior_low, prior_high]),
+#    n_samples=args.posterior_samples,
+#    seed=args.seed,
+#    num_cores=args.num_cpus,
+#)
+
+# --- ABC rejection using training data ---
+print("\nRunning ABC rejection on training data...")
+# Find the config with SFS processor (has pre-computed summary stats)
+sfs_config = None
+for config_path in args.configfile:
+    cfg = yaml.safe_load(open(config_path))
+    if cfg["processor"]["class_name"] == "tskit_sfs":
+        sfs_config = cfg
+        break
+
+if sfs_config is None:
+    raise ValueError("No config with tskit_sfs processor found - ABC rejection requires pre-computed summary statistics")
+
+project_dir = sfs_config["project_dir"]
+random_seed = int(sfs_config["random_seed"])
+n_train = int(sfs_config["n_train"])
+train_separately = bool(sfs_config["train_embedding_net_separately"])
+sim_config = sfs_config["simulator"]
+simulator_name = sim_config["class_name"]
+processor_config = sfs_config["processor"]
+processor_name = processor_config["class_name"]
+embedding_config = sfs_config["embedding_network"]
+embedding_name = embedding_config["class_name"]
+
+# Construct path to training data
+train_path = (
+    f"{project_dir}/"
+    f"{simulator_name}-"
+    f"{processor_name}-"
+    f"{embedding_name}-"
+    f"{random_seed}-"
+    f"{n_train}"
+)
+if train_separately:
+    train_path += "-sep/"
+else:
+    train_path += "-e2e/"
+
+print(f"Loading training data from: {train_path}")
+
+# Load training parameters and summary statistics from zarr
+import zarr
+train_zarr = zarr.open(f"{train_path}tensors/zarr", mode='r')
+
+# Get training indices
+train_indices = train_zarr['sbi_train'][:]
+
+# Load parameters for training set only
+all_targets = train_zarr['targets'][:]
+# Convert from object array to 2D numpy array
+training_params = np.array([all_targets[i] for i in train_indices])
+print(f"Loaded {len(training_params)} training parameters with shape {training_params.shape}")
+
+# Load pre-computed summary statistics
+# For SFS processor, the summary stats are already calculated and stored
+diversity_all = train_zarr['diversity'][:]
+segregating_sites_all = train_zarr['segregating_sites'][:]
+tajimas_d_all = train_zarr['Tajimas_D'][:]
+
+# Select training set
+diversity_train = diversity_all[train_indices]
+segregating_sites_train = segregating_sites_all[train_indices]
+tajimas_d_train = tajimas_d_all[train_indices]
+
+# Combine into summary stats array
+training_stats = np.column_stack([diversity_train, segregating_sites_train, tajimas_d_train])
+print(f"Training summary stats shape: {training_stats.shape}")
+
+# Run ABC rejection
+abc_rej_samples = abc_utils.run_abc_rejection(
+    obs_ts=ts,
+    training_params=training_params,
+    training_stats=training_stats,
+    n_samples=args.posterior_samples,
+    quantile=args.quantile,
+    seed=args.seed,
+)
+
 
 # DEBUG: check against the moments implementation
 #from moments.Godambe import GIM_uncert
@@ -361,11 +481,11 @@ pickle.dump(
 text_offset = np.array([-(prior_high[0] - prior_low[0]) * 0.01, 0])
 plt.clf()
 rows = 1
-cols = len(args.configfile) + 1
+cols = len(args.configfile) + 2  # +1 for moments, +1 for ABC-Rejection (SMC disabled for testing)
 fig, axs = plt.subplots(
-    rows, cols, 
-    figsize=(cols * 5, rows * 4), 
-    constrained_layout=True, 
+    rows, cols,
+    figsize=(cols * 5, rows * 4),
+    constrained_layout=True,
     squeeze=False,
 )
 
@@ -399,6 +519,59 @@ if not args.skip_bootstrap:
 else:
     posterior_samples.append(godambe_samples)
     posterior_labels.append("MomentsGodambe")
+
+# Add ABC methods to posterior data
+# TEMPORARILY COMMENTED OUT ABC-SMC FOR TESTING
+#posterior_samples.append(abc_smc_samples)
+#posterior_labels.append("ABC-SMC")
+#abc_smc_surface = abc_utils.estimate_abc_surface(abc_smc_samples, breaks_nu, breaks_T)
+#posterior_surface.append(abc_smc_surface)
+
+posterior_samples.append(abc_rej_samples)
+posterior_labels.append("ABC-Rejection")
+abc_rej_surface = abc_utils.estimate_abc_surface(abc_rej_samples, breaks_nu, breaks_T)
+posterior_surface.append(abc_rej_surface)
+
+# TEMPORARILY COMMENTED OUT ABC-SMC PANEL
+## Plot ABC-SMC panel
+#abc_smc_mean = abc_smc_samples.mean(axis=0)
+#img = axs[0, 1].pcolormesh(
+#    breaks_nu, breaks_T,
+#    abc_smc_surface.reshape(grid_size, grid_size).T,
+#    cmap="terrain",
+#)
+#axs[0, 1].plot(*args.params, "o", color="red", markersize=4)
+#axs[0, 1].text(
+#    *(args.params + text_offset), s="True",
+#    color="red", ha="right", va="center", size=10,
+#)
+#axs[0, 1].plot(*abc_smc_mean, "o", color="green", markersize=4)
+#axs[0, 1].text(
+#    *(abc_smc_mean + text_offset), s=r"$\mathbb{E}[\theta]$",
+#    color="green", ha="right", va="center", size=10,
+#)
+#axs[0, 1].set_title("ABC-SMC")
+#plt.colorbar(img, ax=axs[0, 1], label="log posterior")
+
+# Plot ABC-Rejection panel
+abc_rej_mean = abc_rej_samples.mean(axis=0)
+img = axs[0, 1].pcolormesh(
+    breaks_nu, breaks_T,
+    abc_rej_surface.reshape(grid_size, grid_size).T,
+    cmap="terrain",
+)
+axs[0, 1].plot(*args.params, "o", color="red", markersize=4)
+axs[0, 1].text(
+    *(args.params + text_offset), s="True",
+    color="red", ha="right", va="center", size=10,
+)
+axs[0, 1].plot(*abc_rej_mean, "o", color="green", markersize=4)
+axs[0, 1].text(
+    *(abc_rej_mean + text_offset), s=r"$\mathbb{E}[\theta]$",
+    color="green", ha="right", va="center", size=10,
+)
+axs[0, 1].set_title("ABC-Rejection")
+plt.colorbar(img, ax=axs[0, 1], label="log posterior")
 
 # plot the log posteriors
 for i, configfile in enumerate(args.configfile):
@@ -471,23 +644,23 @@ for i, configfile in enumerate(args.configfile):
     posterior_surface.append(grid_logprob)
     mean = posterior_samples[-1].mean(axis=0)
 
-    img = axs[0, i + 1].pcolormesh(
+    img = axs[0, i + 2].pcolormesh(
         breaks_nu, breaks_T,
-        grid_logprob.reshape(grid_size, grid_size).T, 
-        cmap="terrain", 
+        grid_logprob.reshape(grid_size, grid_size).T,
+        cmap="terrain",
     )
-    axs[0, i + 1].plot(*args.params, "o", color="red", markersize=4)
-    axs[0, i + 1].text(
-        *(args.params + text_offset), s="True", 
+    axs[0, i + 2].plot(*args.params, "o", color="red", markersize=4)
+    axs[0, i + 2].text(
+        *(args.params + text_offset), s="True",
         color="red", va="center", ha="right", size=10,
     )
-    axs[0, i + 1].plot(*mean, "o", color="green", markersize=4)
-    axs[0, i + 1].text(
-        *(mean + text_offset), s=r"$\mathbb{E}[\theta]$", 
+    axs[0, i + 2].plot(*mean, "o", color="green", markersize=4)
+    axs[0, i + 2].text(
+        *(mean + text_offset), s=r"$\mathbb{E}[\theta]$",
         color="green", va="center", ha="right", size=10,
     )
-    axs[0, i + 1].set_title(f"{embedding_name}")
-    plt.colorbar(img, ax=axs[0, i + 1], label="log posterior")
+    axs[0, i + 2].set_title(f"{embedding_name}")
+    plt.colorbar(img, ax=axs[0, i + 2], label="log posterior")
 fig.supxlabel(r"Bottleneck severity ($\nu$)")
 fig.supylabel(r"Time of bottleneck ($T$)")
 plt.savefig(f"{args.outpath}/loglik-surface.png")
