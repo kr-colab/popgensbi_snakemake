@@ -68,6 +68,7 @@ parser.add_argument("--seed", help="Random seed passed to simulator", type=int, 
 parser.add_argument("--grid-size", help="Grid size for plots", type=int, default=25)
 parser.add_argument("--posterior-samples", help="Number of samples to draw from posterior/bootstrap", type=int, default=1000)
 parser.add_argument("--num-cpus", help="Number of workers for parallel computation", type=int, default=20)
+parser.add_argument("--quantile", help="Quantile for ABC rejection (e.g., 0.01 for top 1% closest simulations)", type=float, default=0.01)
 args = parser.parse_args()
 
 
@@ -446,7 +447,7 @@ abc_rej_samples = abc_utils.run_abc_rejection(
     training_params=training_params,
     training_stats=training_stats,
     n_samples=args.posterior_samples,
-    quantile=0.01,  # Use top 1% closest simulations
+    quantile=args.quantile,
     seed=args.seed,
 )
 
