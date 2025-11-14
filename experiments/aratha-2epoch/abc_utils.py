@@ -68,22 +68,7 @@ def standardize_stats(stats, obs_stats):
     """
     Standardize statistics by observed values.
 
-    This is necessary because different statistics have vastly different scales:
-    - Diversity: ~10^-5 to 10^-3
-    - Segregating sites: 0-1000s
-    - Tajima's D: -2 to +2
 
-    Parameters
-    ----------
-    stats : np.ndarray
-        Statistics to standardize
-    obs_stats : np.ndarray
-        Observed statistics for normalization
-
-    Returns
-    -------
-    np.ndarray
-        Standardized statistics
     """
     # Avoid division by zero
     epsilon = 1e-10
@@ -294,6 +279,7 @@ def run_abc_rejection(obs_ts, training_params, training_stats, n_samples=1000,
     This is a "fair" comparison to NPE methods, using the same training data
     rather than running new simulations.
 
+    TODO: This could be extended to do regression adjustment. Also hardcoded for 2 params.
     Parameters
     ----------
     obs_ts : tskit.TreeSequence
