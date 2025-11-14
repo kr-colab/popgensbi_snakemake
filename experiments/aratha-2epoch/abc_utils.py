@@ -284,3 +284,65 @@ def estimate_abc_surface(samples, breaks_nu, breaks_T):
     log_prob -= np.max(log_prob)
 
     return log_prob
+
+
+def run_abc_rejection(obs_ts, training_params, training_stats, n_samples=1000,
+                     quantile=0.01, seed=1024):
+    """
+    Run ABC rejection using pre-computed training simulations.
+
+    This is a "fair" comparison to NPE methods, using the same training data
+    rather than running new simulations.
+
+    Parameters
+    ----------
+    obs_ts : tskit.TreeSequence
+        Observed tree sequence
+    training_params : np.ndarray
+        Parameters from training simulations, shape (n_train, 2) for [nu, T]
+    training_stats : np.ndarray
+        Summary statistics from training simulations, shape (n_train, 3) for [π, S, D]
+    n_samples : int, default=1000
+        Number of posterior samples to return (with replacement from accepted)
+    quantile : float, default=0.01
+        Quantile of distances to accept (e.g., 0.01 = top 1% closest)
+    seed : int, default=1024
+        Random seed for resampling
+
+    Returns
+    -------
+    samples : np.ndarray
+        Posterior samples of shape (n_samples, 2) for [nu, T]
+    """
+    np.random.seed(seed)
+
+    # Calculate observed summary stats
+    obs_stats = calculate_summary_stats(obs_ts)
+    print(f"Observed summary statistics: π={obs_stats[0]:.6f}, S={obs_stats[1]:.0f}, D={obs_stats[2]:.4f}")
+
+    # Standardize stats (using training data mean/std)
+    obs_standardized = (obs_stats - training_stats.mean(0)) / training_stats.std(0)
+    training_standardized = (training_stats - training_stats.mean(0)) / training_stats.std(0)
+
+    # Calculate Euclidean distances
+    distances = np.linalg.norm(training_standardized - obs_standardized, axis=1)
+
+    # Accept closest simulations based on quantile
+    threshold = np.quantile(distances, quantile)
+    accepted_idx = distances <= threshold
+    accepted_params = training_params[accepted_idx]
+
+    print(f"ABC rejection: accepted {accepted_idx.sum()} / {len(training_params)} simulations (quantile={quantile})")
+    print(f"Distance threshold: {threshold:.4f}")
+
+    # Resample with replacement to get n_samples
+    if len(accepted_params) == 0:
+        raise ValueError("No simulations accepted! Try increasing quantile.")
+
+    resample_idx = np.random.choice(len(accepted_params), size=n_samples, replace=True)
+    samples = accepted_params[resample_idx]
+
+    print(f"ABC rejection complete. Generated {samples.shape[0]} samples.")
+    print(f"Posterior mean: nu={samples[:, 0].mean():.4f}, T={samples[:, 1].mean():.4f}")
+
+    return samples
